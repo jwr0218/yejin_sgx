@@ -1,0 +1,6 @@
+requests
+selenium
+datetime
+PyQt6
+pyinstaller
+python-dateutil

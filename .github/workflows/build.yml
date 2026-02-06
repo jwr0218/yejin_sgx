@@ -1,0 +1,32 @@
+# .github/workflows/build.yml
+name: Build_Windows_EXE
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install pyinstaller pyqt6 selenium
+
+    - name: Build EXE
+      run: |
+        # chromedriver를 내장하지 않으므로 --add-data 옵션을 뺍니다.
+        python -m PyInstaller --onefile --windowed main.py
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: Windows_Program
+        path: dist/main.exe
