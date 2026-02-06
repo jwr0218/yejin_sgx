@@ -1,32 +1,40 @@
-# .github/workflows/build.yml
 name: Build_Windows_EXE
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main" ]  # main 브랜치에 push될 때 실행
 
 jobs:
   build:
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v3
+    runs-on: windows-latest  # 윈도우 서버 환경 빌려오기
 
+    steps:
+    # 1. 소스코드 가져오기 (최신 v4 사용)
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2. 파이썬 환경 설정 (최신 v5 사용)
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.10'
 
+    # 3. 필요한 라이브러리 설치
     - name: Install dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install pyinstaller pyqt6 selenium
 
+    # 4. PyInstaller로 빌드 (하나의 파일로, 윈도우 창 모드로)
     - name: Build EXE
       run: |
-        # chromedriver를 내장하지 않으므로 --add-data 옵션을 뺍니다.
-        python -m PyInstaller --onefile --windowed main.py
+        # --windowed: GUI 앱일 때 콘솔 창 안 뜨게 함
+        # --clean: 빌드 전 캐시 삭제
+        python -m PyInstaller --onefile --windowed --clean main.py
 
+    # 5. 결과물 업로드 (최신 v4 사용)
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: Windows_Program
+        name: MyWindowsApp
         path: dist/main.exe
