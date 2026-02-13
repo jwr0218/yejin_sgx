@@ -23,8 +23,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller pyqt6 selenium
-
+        pip install pyinstaller pyqt6 selenium requests datetime PyQt6 python-dateutil
+        
     # 4. PyInstaller로 빌드 (하나의 파일로, 윈도우 창 모드로)
     - name: Build EXE
       run: |
