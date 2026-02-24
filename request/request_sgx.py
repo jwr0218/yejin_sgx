@@ -47,10 +47,10 @@ def get_driver_path():
     return  '/Users/jeong-wonlyeol/Desktop/yejin/chromedriver'
 
 # 사용 예시
-chrome_driver_path = get_driver_path()
+# chrome_driver_path = get_driver_path()
 
 driver_path = ChromeDriverManager().install()
-s = Service(chrome_driver_path)
+s = Service(driver_path)
 driver = webdriver.Chrome(service=s, options=options)
 
 # SGX UC(USD/CNH) 선물 페이지 접속
