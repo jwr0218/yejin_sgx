@@ -24,7 +24,7 @@ class Page1(QWidget):
             "PX-PTA SPREAD", "ZCEPX-SGXPX", "USD/CNH", "BOX"
         ]
         
-        self.table = QTableWidget(12, len(self.headers))
+        self.table = QTableWidget(11, len(self.headers))
         self.table.setHorizontalHeaderLabels(self.headers)
         
         # UI 초기화 및 스타일 적용
@@ -51,12 +51,16 @@ class Page1(QWidget):
         btn_layout.addWidget(self.btn_reset)
         btn_layout.addWidget(self.btn_excel)
         btn_layout.addWidget(self.btn_capture)
+
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+
         layout.addLayout(btn_layout)
         
         self.setLayout(layout)
 
     def init_table_defaults(self):
-        for row in range(12):
+        for row in range(11):
             for col in [3, 5]: 
                 self.set_val(row, col, 0)
 
@@ -70,8 +74,9 @@ class Page1(QWidget):
         bold_months = [1, 3, 5, 7, 9, 11]
         color_months = [1, 5, 9]
 
-        for i in range(12):
-            target_date = now + relativedelta(months=i)
+        for i in range(11):
+            # 변경점: 당월 제외, 다음 달부터 표시되도록 i + 1을 적용합니다.
+            target_date = now + relativedelta(months=i + 1) 
             month_int = target_date.month
             
             # 1. 날짜 형식 수정: 26-JAN
@@ -151,25 +156,30 @@ class Page1(QWidget):
             return 0.0
 
     def load_all_market_data(self):
-        """API 로드 및 2-Pass 보정 (앞 칸 우선 채우기 -> 남은 빈칸 뒷 칸 채우기)"""
+        """API 로드 및 2-Pass 보정 (당월 제외, 다음 달부터 로드)"""
         self.table.blockSignals(True)
         
-        # 1. API 데이터 기본 로드 (기존 소스 동일)
+        # 1. API 데이터 기본 로드
         pta_data = get_year_prices("nf_TA", 8)
         px_future_data = get_year_prices("nf_PX", 8)
         brent_oil = get_year_prices("hf_OIL", 8)
         sgx_value = get_year_sgx()
 
+        # 당월 데이터를 건너뛰고 다음 달(인덱스 1)부터 테이블(인덱스 0)에 매핑
         for row in range(12):
-            if row < len(brent_oil) and brent_oil[row]['price'] != 'N/A':
-                self.set_val(row, 1, float(brent_oil[row]['price']))
-            if row < len(px_future_data) and px_future_data[row]['price'] != 'N/A':
-                self.set_val(row, 7, float(px_future_data[row]['price']))
-            if row < len(pta_data) and pta_data[row]['price'] != 'N/A':
-                self.set_val(row, 8, float(pta_data[row]['price']))
+            data_idx = row + 1  # 💡 핵심: API 데이터에서 1번 인덱스(다음 달)부터 가져옴
+
+            if data_idx < len(brent_oil) and brent_oil[data_idx]['price'] != 'N/A':
+                self.set_val(row, 1, float(brent_oil[data_idx]['price']))
             
-            if row < len(sgx_value) and sgx_value[row]['price'] != 'N/A':
-                self.set_val(row, 11, float(sgx_value[row]['price']))
+            if data_idx < len(px_future_data) and px_future_data[data_idx]['price'] != 'N/A':
+                self.set_val(row, 7, float(px_future_data[data_idx]['price']))
+            
+            if data_idx < len(pta_data) and pta_data[data_idx]['price'] != 'N/A':
+                self.set_val(row, 8, float(pta_data[data_idx]['price']))
+            
+            if data_idx < len(sgx_value) and sgx_value[data_idx]['price'] != 'N/A':
+                self.set_val(row, 11, float(sgx_value[data_idx]['price']))
                 item = self.table.item(row, 11)
                 if item: item.setForeground(QColor("black"))
             else:
@@ -199,7 +209,58 @@ class Page1(QWidget):
 
         self.table.blockSignals(False)
         self.calculate_all_logic()
-        print("2-Pass 환율 보정 완료 (앞 칸 우선순위 보장)")
+        print("2-Pass 환율 보정 및 당월 제외 데이터 로드 완료")
+
+    # def load_all_market_data(self):
+        # """API 로드 및 2-Pass 보정 (앞 칸 우선 채우기 -> 남은 빈칸 뒷 칸 채우기)"""
+        # self.table.blockSignals(True)
+        
+        # # 1. API 데이터 기본 로드 (기존 소스 동일)
+        # pta_data = get_year_prices("nf_TA", 8)
+        # px_future_data = get_year_prices("nf_PX", 8)
+        # brent_oil = get_year_prices("hf_OIL", 8)
+        # sgx_value = get_year_sgx()
+
+        # for row in range(12):
+        #     if row < len(brent_oil) and brent_oil[row]['price'] != 'N/A':
+        #         self.set_val(row, 1, float(brent_oil[row]['price']))
+        #     if row < len(px_future_data) and px_future_data[row]['price'] != 'N/A':
+        #         self.set_val(row, 7, float(px_future_data[row]['price']))
+        #     if row < len(pta_data) and pta_data[row]['price'] != 'N/A':
+        #         self.set_val(row, 8, float(pta_data[row]['price']))
+            
+        #     if row < len(sgx_value) and sgx_value[row]['price'] != 'N/A':
+        #         self.set_val(row, 11, float(sgx_value[row]['price']))
+        #         item = self.table.item(row, 11)
+        #         if item: item.setForeground(QColor("black"))
+        #     else:
+        #         self.set_val(row, 11, 0)
+
+        # # 2. [Pass 1] 순방향 보정: 앞 칸(위)의 값을 아래로 전파 (앞 칸 우선 논리)
+        # check = [False for i in range(1,13)]
+
+        # for row in range(1, 12): # 1번 행부터 시작
+        #     if self.get_val(row, 11) == 0 :
+        #         prev_v = self.get_val(row - 1, 11)
+        #         if prev_v != 0 and check[row-1] == False:
+        #             check[row] = True
+        #             self.set_val(row, 11, prev_v)
+        #             item = self.table.item(row, 11)
+        #             if item: item.setForeground(QColor("blue"))
+
+        # # 3. [Pass 2] 역방향 보정: 여전히 0인 칸은 뒷 칸(아래)의 값을 위로 전파
+        # for row in range(10, -1, -1): # 10번 행부터 0번 행까지 거꾸로
+        #     if self.get_val(row, 11) == 0:
+        #         next_v = self.get_val(row + 1, 11)
+        #         if next_v != 0 and check[row+1] == False:
+        #             check[row] = True
+        #             self.set_val(row, 11, next_v)
+        #             item = self.table.item(row, 11)
+        #             if item: item.setForeground(QColor("blue"))
+
+        # self.table.blockSignals(False)
+        # self.calculate_all_logic()
+        # print("2-Pass 환율 보정 완료 (앞 칸 우선순위 보장)")
 
     def reset_all_data(self):
         """모든 데이터를 초기화하고 Spread 열을 0.5초간 노란색으로 깜빡임"""

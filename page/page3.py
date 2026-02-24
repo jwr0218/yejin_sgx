@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QLabel, QHeaderView, QComboBox, 
-                             QPushButton, QLineEdit, QMessageBox, QGridLayout)
+                             QPushButton, QLineEdit, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 
@@ -29,19 +29,21 @@ class Page3(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout()
-        grid_layout = QGridLayout()
+        
+        # 가로 배치 레이아웃 (왼쪽, 오른쪽)
+        calc_layout = QHBoxLayout()
 
-        # 4개 계산기 구성 (제목, 모드)
+        # 2개 계산기로 축소 (왼쪽: PX-PTA, 오른쪽: ZCE-SGX)
         calc_configs = [
-            ("PX-PTA (1)", "PX-PTA"), ("PX-PTA (2)", "PX-PTA"),
-            ("ZCE-SGX (1)", "ZCE-SGX"), ("ZCE-SGX (2)", "ZCE-SGX")
+            ("PX-PTA", "PX-PTA"), 
+            ("ZCE-SGX", "ZCE-SGX")
         ]
 
-        for i, (title, mode) in enumerate(calc_configs):
+        for title, mode in calc_configs:
             calc_widget = self.create_calculator_unit(title, mode)
-            grid_layout.addWidget(calc_widget, i // 2, i % 2)
+            calc_layout.addWidget(calc_widget)
 
-        main_layout.addLayout(grid_layout)
+        main_layout.addLayout(calc_layout)
 
         # 하단 캡처 버튼
         self.btn_capture = QPushButton("화면 캡쳐 (save image)")
@@ -71,7 +73,7 @@ class Page3(QWidget):
 
         # 2. 상단 입력 테이블
         header_table = QTableWidget(1, 4)
-        f_label = "pta future" if mode == "PX-PTA" else "px future"
+        f_label = "PTA future" if mode == "PX-PTA" else "PX future"
         headers = ["month", "spread", f_label, "usd/chn"]
         
         header_table.setHorizontalHeaderLabels(headers)
@@ -109,9 +111,9 @@ class Page3(QWidget):
         btn_row.addWidget(calc_btn)
 
         # 4. 결과 테이블
-        # ZCE-SGX는 PX 입력을 받아 PTA를 시뮬레이션하고, PX-PTA는 PTA 입력을 받아 PX를 시뮬레이션함
-        target_col_name = "PX" if mode == "PX-PTA" else "PTA"
-        res_headers = ["month", target_col_name, "spread", f_label.split()[0], "usd/chn"]
+        target_col_name1 = "PX" 
+        target_col_name2 = "PTA Future" if mode == "PX-PTA" else "PX Future"
+        res_headers = ["month", target_col_name1, "spread", target_col_name2, "usd/chn"]
         result_table = QTableWidget(9, 5)
         result_table.setHorizontalHeaderLabels(res_headers)
         result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -142,7 +144,6 @@ class Page3(QWidget):
         return container
 
     def on_reset_clicked(self, cid):
-        """초기화: 입력값과 결과 테이블만 삭제"""
         calc = self.calculators[cid]
         calc['spread_le'].clear()
         calc['future_cb'].setEditText("")
@@ -158,7 +159,6 @@ class Page3(QWidget):
             table.setItem(row, 0, item)
 
     def parse_value(self, text):
-        """'9494-JAN' 형식에서 숫자 추출"""
         if not text: return 0.0
         try: return float(text.split('-')[0].replace(',', ''))
         except: return 0.0
@@ -170,23 +170,19 @@ class Page3(QWidget):
         month_idx = str(self.months.index(selected_month) + 1).zfill(2)
         
         try:
-            # 1. 데이터 가져오기
-            # PX-PTA 모드일 때는 PTA(nf_TA) 데이터, ZCE-SGX 모드일 때는 PX(nf_PX) 데이터를 가져옴
             if mode == "PX-PTA":
                 future_data = get_year_prices("nf_TA", 8)
             else:
-                future_data = get_year_prices("nf_PX", 8) # 알려주신 PX 코드 반영
+                future_data = get_year_prices("nf_PX", 8) 
             
             usd_data = get_year_sgx()
 
-            # 2. 콤보박스 아이템 생성
             calc['future_cb'].clear()
             calc['usd_cb'].clear()
             
             f_target_text = ""
             u_target_text = ""
 
-            # Future 칸 처리
             for item in future_data:
                 p = item.get('price', '0')
                 m_n = item.get('month', '').split('/')[-1]
@@ -195,7 +191,6 @@ class Page3(QWidget):
                 calc['future_cb'].addItem(display_txt)
                 if m_n == month_idx: f_target_text = display_txt
 
-            # USD/CHN 칸 처리
             for item in usd_data:
                 p = item.get('price', '0')
                 m_n = item.get('month', '').split('/')[-1]
@@ -204,16 +199,13 @@ class Page3(QWidget):
                 calc['usd_cb'].addItem(display_txt)
                 if m_n == month_idx: u_target_text = display_txt
 
-            # 3. 값 자동 입력
             if f_target_text: calc['future_cb'].setEditText(f_target_text)
             if u_target_text: calc['usd_cb'].setEditText(u_target_text)
 
-            # 4. Blink 효과 적용
             flash_style = "background-color: #FFF176; border: 1px solid #FBC02D; font-weight: bold;"
             calc['future_cb'].setStyleSheet(flash_style)
             calc['usd_cb'].setStyleSheet(flash_style)
             
-            # 0.6초 후 스타일 초기화
             QTimer.singleShot(600, lambda: self.reset_flash_style(calc))
 
         except Exception as e:
@@ -236,23 +228,19 @@ class Page3(QWidget):
 
             if u == 0: return
 
-            # 역산 수식
             if mode == "PX-PTA":
-                # f=PTA Future, PX를 역산: PX = (PTA - Spread) / (Const * USD)
                 center_val = (f - s) / (const_val * u)
             else:
-                # f=PX Future, PTA를 역산: PTA = (PX * Const * USD) + Spread
-                center_val = (f * const_val * u) + s
+                center_val = (f - s) /(const_val * u)
 
             offsets = [-2.0, -1.5, -1.0, -0.5, 0, 0.5, 1.0, 1.5, 2.0]
 
             for row, offset in enumerate(offsets):
                 curr_val = center_val + offset
-                # Spread 재계산
                 if mode == "PX-PTA":
                     calc_s = f - (curr_val * const_val * u)
                 else:
-                    calc_s = curr_val - (f * const_val * u)
+                    calc_s =  f - (curr_val*const_val*u)
 
                 calc['result'].setItem(row, 0, QTableWidgetItem(m))
                 calc['result'].setItem(row, 1, QTableWidgetItem(f"{curr_val:.1f}"))
@@ -273,7 +261,9 @@ class Page3(QWidget):
 
 if __name__ == "__main__":
     from PyQt6.QtWidgets import QApplication
+
     app = QApplication(sys.argv)
     window = Page3()
+    window.resize(1000, 600) # 가로로 넓게 보이도록 창 기본 크기 지정
     window.show()
     sys.exit(app.exec())

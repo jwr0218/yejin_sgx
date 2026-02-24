@@ -18,6 +18,7 @@ class Page2(QWidget):
         self.table.setHorizontalHeaderLabels(headers)
         self.table.setStyleSheet(config.HEADER_STYLE)
         self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         
         layout.addWidget(self.table)
 
@@ -93,7 +94,7 @@ class Page2(QWidget):
         self.add_product_rows("PTA", pta_data, target_list)
         self.add_product_rows("PX", px_data, target_list)
         
-        self.table.resizeColumnsToContents()
+        # self.table.resizeColumnsToContents()
 
     def add_product_rows(self, name, data_dict, target_list):
         """동적 타겟 리스트를 기반으로 행 추가 (형식: 26-JAN)"""
