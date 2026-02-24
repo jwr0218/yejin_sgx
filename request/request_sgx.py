@@ -3,8 +3,6 @@ from selenium.webdriver.chrome.service import Service # Service 객체 추가
 from selenium.webdriver.common.by import By            # 요소 탐색용
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-
 import sys
 import os 
 import time
@@ -42,15 +40,12 @@ def get_driver_path():
     # OS별 드라이버 파일명 설정
     is_win = platform.system() == "Windows"
     driver_name = "chromedriver.exe" if is_win else "chromedriver"
-    print(driver_name)
+    
     return os.path.join(base_path, driver_name)
-    # return  '/Users/jeong-wonlyeol/Desktop/yejin/chromedriver'
 
 # 사용 예시
-# chrome_driver_path = get_driver_path()
-
-driver_path = ChromeDriverManager().install()
-s = Service(driver_path)
+chrome_driver_path = get_driver_path()
+s = Service(chrome_driver_path)
 driver = webdriver.Chrome(service=s, options=options)
 
 # SGX UC(USD/CNH) 선물 페이지 접속
