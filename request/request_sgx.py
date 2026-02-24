@@ -1,4 +1,5 @@
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service # Service 객체 추가
 from selenium.webdriver.common.by import By            # 요소 탐색용
 from selenium.webdriver.support.ui import WebDriverWait
@@ -10,7 +11,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import platform
 
-options = webdriver.ChromeOptions()
+options = Options()
 
 # headless 옵션 설정
 options.add_argument('headless')

@@ -10,7 +10,7 @@ from dateutil.relativedelta import relativedelta
 from page.page1 import Page1
 from page.page2 import Page2
 from page.page3 import Page3
-from request.request_other import get_year_prices
+# from request.request_other import get_year_prices
 # from request_sgx import get_year_sgx , turn_off_driver
 # 공통 스타일: 엑셀 느낌의 헤더 스타일
 
