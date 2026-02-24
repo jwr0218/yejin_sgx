@@ -19,18 +19,18 @@ jobs:
       with:
         python-version: '3.10'
 
-    # 3. 필요한 라이브러리 설치
+    # 3. 필요한 라이브러리 설치 (PyQt6 중복 제거)
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pyinstaller pyqt6 selenium requests datetime PyQt6 python-dateutil webdriver-manager
+        pip install pyinstaller pyqt6 selenium requests datetime python-dateutil webdriver-manager
         
-    # 4. PyInstaller로 빌드 (하나의 파일로, 윈도우 창 모드로)
+    # 4. PyInstaller로 빌드 (Hidden import 추가)
     - name: Build EXE
       run: |
-        # --windowed: GUI 앱일 때 콘솔 창 안 뜨게 함
-        # --clean: 빌드 전 캐시 삭제
-        python -m PyInstaller --onefile --windowed --clean main.py
+        # --noconfirm: 기존 빌드 덮어쓰기 확인 생략
+        # --hidden-import: 누락되는 selenium 모듈 강제 포함
+        pyinstaller --noconfirm --onefile --windowed --clean --hidden-import="selenium.webdriver.chrome.options" main.py
 
     # 5. 결과물 업로드 (최신 v4 사용)
     - name: Upload Artifact

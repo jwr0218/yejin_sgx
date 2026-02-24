@@ -40,11 +40,11 @@ def get_driver_path():
         base_path = os.path.dirname(os.path.abspath(__file__))
     
     # OS별 드라이버 파일명 설정
-    # is_win = platform.system() == "Windows"
-    # driver_name = "chromedriver.exe" if is_win else "chromedriver"
-    # print(driver_name)
-    # return os.path.join(base_path, driver_name)
-    return  '/Users/jeong-wonlyeol/Desktop/yejin/chromedriver'
+    is_win = platform.system() == "Windows"
+    driver_name = "chromedriver.exe" if is_win else "chromedriver"
+    print(driver_name)
+    return os.path.join(base_path, driver_name)
+    # return  '/Users/jeong-wonlyeol/Desktop/yejin/chromedriver'
 
 # 사용 예시
 # chrome_driver_path = get_driver_path()
