@@ -17,7 +17,6 @@ _driver = None
 
 
 def get_driver():
-    """최초 호출 시 한 번만 driver를 생성하고, 이후엔 동일 인스턴스를 반환"""
     global _driver
     if _driver is not None:
         return _driver
@@ -30,19 +29,18 @@ def get_driver():
     options.add_argument('--lang=ko_KR')
     options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36')
 
-    if getattr(sys, 'frozen', False):
-        base_path = os.path.dirname(sys.executable)
-        is_win = platform.system() == "Windows"
-        driver_name = "chromedriver.exe" if is_win else "chromedriver"
-        service = Service(os.path.join(base_path, driver_name))
-    else:
+    try:
+        # 방법 1: webdriver-manager로 자동 다운로드
         driver_path = ChromeDriverManager().install()
         driver_dir = os.path.dirname(driver_path)
         is_win = platform.system() == "Windows"
         driver_name = "chromedriver.exe" if is_win else "chromedriver"
         service = Service(os.path.join(driver_dir, driver_name))
+        _driver = webdriver.Chrome(service=service, options=options)
+    except Exception:
+        # 방법 2: 실패하면 Selenium 내장 매니저로 시도
+        _driver = webdriver.Chrome(options=options)
 
-    _driver = webdriver.Chrome(service=service, options=options)
     _driver.get('https://www.sgx.com/derivatives/delayed-prices-futures?category=fx&cc=UC')
     _driver.implicitly_wait(5)
     time.sleep(5)
