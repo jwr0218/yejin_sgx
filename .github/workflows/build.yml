@@ -15,16 +15,16 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.11'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller pyqt6 selenium==4.25.0 requests python-dateutil webdriver-manager
-        
+
     - name: Build EXE
       run: |
-        python -m PyInstaller --onefile --windowed --clean main.py
+        python -m PyInstaller --onefile --windowed --clean --hidden-import=selenium.webdriver.chrome.webdriver --hidden-import=selenium.webdriver.chrome.service main.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
