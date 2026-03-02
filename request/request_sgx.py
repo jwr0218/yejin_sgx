@@ -50,6 +50,9 @@ def get_driver_path():
 # chrome_driver_path = get_driver_path()
 # service = Service(chrome_driver_path)
 driver_path = ChromeDriverManager().install()
+driver_dir = os.path.dirname(driver_path)
+driver_path = os.path.join(driver_dir, "chromedriver")
+
 service = Service(driver_path)
 driver = webdriver.Chrome(service=service, options=options)
 
