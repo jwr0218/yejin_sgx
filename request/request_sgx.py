@@ -1,67 +1,52 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service # Service 객체 추가
-from selenium.webdriver.common.by import By            # 요소 탐색용
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 import sys
-import os 
+import os
 import time
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import platform
 
-options = Options()
-
-# headless 옵션 설정
-options.add_argument('headless')
-options.add_argument("no-sandbox")
-
-# 브라우저 윈도우 사이즈
-options.add_argument('window-size=1920x1080')
+_driver = None
 
 
-# 사람처럼 보이게 하는 옵션들
-options.add_argument("disable-gpu")
-options.add_argument("lang=ko_KR")
-options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36')
+def get_driver():
+    """최초 호출 시 한 번만 driver를 생성하고, 이후엔 동일 인스턴스를 반환"""
+    global _driver
+    if _driver is not None:
+        return _driver
 
-# 1. [경고 해결] Service 객체를 통해 드라이버 위치 지정
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--window-size=1920x1080')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--lang=ko_KR')
+    options.add_argument('user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.100 Safari/537.36')
 
-
-def get_driver_path():
-    """실행 파일(.exe/.app)과 동일한 폴더에 있는 chromedriver 경로 반환"""
     if getattr(sys, 'frozen', False):
-        # PyInstaller로 빌드된 .exe나 .app이 실행 중인 폴더 경로
         base_path = os.path.dirname(sys.executable)
+        is_win = platform.system() == "Windows"
+        driver_name = "chromedriver.exe" if is_win else "chromedriver"
+        service = Service(os.path.join(base_path, driver_name))
     else:
-        # 일반 .py 스크립트 실행 환경 (현재 작업 디렉토리)
-        base_path = os.path.dirname(os.path.abspath(__file__))
-    
-    # OS별 드라이버 파일명 설정
-    is_win = platform.system() == "Windows"
-    driver_name = "chromedriver.exe" if is_win else "chromedriver"
-    
-    return os.path.join(base_path, driver_name)
+        driver_path = ChromeDriverManager().install()
+        driver_dir = os.path.dirname(driver_path)
+        is_win = platform.system() == "Windows"
+        driver_name = "chromedriver.exe" if is_win else "chromedriver"
+        service = Service(os.path.join(driver_dir, driver_name))
 
-# 사용 예시
-# chrome_driver_path = get_driver_path()
-# service = Service(chrome_driver_path)
-driver_path = ChromeDriverManager().install()
-driver_dir = os.path.dirname(driver_path)
-driver_path = os.path.join(driver_dir, "chromedriver")
-
-service = Service(driver_path)
-driver = webdriver.Chrome(service=service, options=options)
-
-# SGX UC(USD/CNH) 선물 페이지 접속
-driver.get('https://www.sgx.com/derivatives/delayed-prices-futures?category=fx&cc=UC')
-
-# 데이터 로딩을 위해 넉넉히 대기 (동적 페이지 특성상 필요)
-driver.implicitly_wait(5) 
-time.sleep(5) # 추가 안정화 시간
+    _driver = webdriver.Chrome(service=service, options=options)
+    _driver.get('https://www.sgx.com/derivatives/delayed-prices-futures?category=fx&cc=UC')
+    _driver.implicitly_wait(5)
+    time.sleep(5)
+    return _driver
 
 
 def get_year_sgx():
@@ -70,7 +55,9 @@ def get_year_sgx():
     Input/Output 포맷은 이전과 동일하게 유지됩니다.
     """
     print("--- SGX 정보 추출 시작 ---")
-    
+    driver = get_driver()  # 첫 호출 시 생성, 이후 재사용
+
+
     current_date = datetime.now()
     months_info = []
     results = []
@@ -119,8 +106,14 @@ def turn_off_driver():
 
 
 
-if __name__ =='__main__':
-    # debug_sgx_extraction()
+def turn_off_driver():
+    global _driver
+    print('프로그램 종료, driver를 종료합니다.')
+    if _driver:
+        _driver.quit()
+        _driver = None
+
+
+if __name__ == '__main__':
     print(get_year_sgx())
-
-
+    turn_off_driver()
