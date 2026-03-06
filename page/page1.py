@@ -123,12 +123,13 @@ class Page1(QWidget):
 
     def on_item_changed(self, item):
         col = item.column()
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)  # 추가
         if col in [1, 2, 3, 4, 5, 7, 8, 11]:
             self.calculate_all_logic()
 
     def calculate_all_logic(self):
         """계단식 로직 및 수식 계산"""
-        for row in range(12):
+        for row in range(11):
             if row > 0:
                 self.set_val(row, 2, self.get_val(row-1, 2) - self.get_val(row-1, 3)) 
                 self.set_val(row, 4, self.get_val(row-1, 4) - self.get_val(row-1, 5)) 
@@ -267,7 +268,7 @@ class Page1(QWidget):
         self.table.blockSignals(True)
         
         # 1. 모든 값 0으로 초기화
-        for row in range(12):
+        for row in range(11):
             for col in range(1, len(self.headers)):
                 self.set_val(row, col, 0)
         
@@ -276,7 +277,7 @@ class Page1(QWidget):
         self.init_month_labels() 
         
         # 3. Spread 열(3번, 5번 컬럼)을 노란색으로 변경 (하이라이트 시작)
-        for row in range(12):
+        for row in range(11):
             for col in [3, 5]: # MOPJ SPREAD, PX SPREAD
                 item = self.table.item(row, col)
                 if item:
@@ -293,7 +294,7 @@ class Page1(QWidget):
         self.table.blockSignals(True)
         
         # Spread 열의 노란색을 지우기 위해 배경색 초기화 (기본 흰색)
-        for row in range(12):
+        for row in range(11):
             for col in [3, 5]:
                 item = self.table.item(row, col)
                 if item:
@@ -311,7 +312,7 @@ class Page1(QWidget):
                 with open(path, 'w', newline='', encoding='utf-8-sig') as f:
                     writer = csv.writer(f)
                     writer.writerow(self.headers)
-                    for row in range(12):
+                    for row in range(11):
                         row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(len(self.headers))]
                         writer.writerow(row_data)
                 QMessageBox.information(self, "성공", "파일이 생성되었습니다.")
