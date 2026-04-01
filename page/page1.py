@@ -2,7 +2,7 @@ import datetime
 import csv
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtCore import Qt , QTimer
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from dateutil.relativedelta import relativedelta
 
 import config
@@ -32,6 +32,7 @@ class Page1(QWidget):
         self.init_month_labels() # 강조 로직 포함
         
         self.table.itemChanged.connect(self.on_item_changed)
+        self.table.installEventFilter(self)
         layout.addWidget(self.table)
 
         btn_layout = QHBoxLayout()
@@ -58,6 +59,16 @@ class Page1(QWidget):
         layout.addLayout(btn_layout)
         
         self.setLayout(layout)
+
+    def eventFilter(self, source, event):
+        if source is self.table and event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                current = self.table.currentIndex()
+                next_row = current.row() + 1
+                if next_row < self.table.rowCount():
+                    self.table.setCurrentCell(next_row, current.column())
+                return True
+        return super().eventFilter(source, event)
 
     def init_table_defaults(self):
         for row in range(11):

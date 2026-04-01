@@ -24,7 +24,7 @@ jobs:
 
     - name: Build EXE
       run: |
-        python -m PyInstaller --onefile --windowed --clean --hidden-import=selenium.webdriver.chrome.webdriver --hidden-import=selenium.webdriver.chrome.service main.py
+        python -m PyInstaller --onefile  --clean --hidden-import=selenium.webdriver.chrome.webdriver --hidden-import=selenium.webdriver.chrome.service main.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
