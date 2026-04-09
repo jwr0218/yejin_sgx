@@ -333,7 +333,7 @@ class Page1(QWidget):
                 for row in range(11):
                     row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(len(self.headers))]
                     writer.writerow(row_data)
-            QMessageBox.information(self, "성공", f"파일이 생성되었습니다.\n{filename}")
+            os.startfile(os.path.abspath(path))
             os.startfile(os.path.abspath(save_dir))
         except Exception as e:
             QMessageBox.critical(self, "실패", str(e))
