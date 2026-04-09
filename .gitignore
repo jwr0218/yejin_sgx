@@ -7,3 +7,4 @@ dist/
 *.spec
 .DS_Store
 screenshot/
+excel_exports/

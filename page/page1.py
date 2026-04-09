@@ -1,5 +1,6 @@
 import datetime
 import csv
+import os
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QEvent
@@ -317,15 +318,22 @@ class Page1(QWidget):
         self.table.blockSignals(False)
 
     def export_to_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
-        if path:
-            try:
-                with open(path, 'w', newline='', encoding='utf-8-sig') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(self.headers)
-                    for row in range(11):
-                        row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(len(self.headers))]
-                        writer.writerow(row_data)
-                QMessageBox.information(self, "성공", "파일이 생성되었습니다.")
-            except Exception as e:
-                QMessageBox.critical(self, "실패", str(e))
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        save_dir = os.path.join(base_dir, "..", "excel_exports")
+        os.makedirs(save_dir, exist_ok=True)
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}.csv"
+        path = os.path.join(save_dir, filename)
+
+        try:
+            with open(path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+                writer.writerow(self.headers)
+                for row in range(11):
+                    row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(len(self.headers))]
+                    writer.writerow(row_data)
+            QMessageBox.information(self, "성공", f"파일이 생성되었습니다.\n{filename}")
+            os.startfile(os.path.abspath(save_dir))
+        except Exception as e:
+            QMessageBox.critical(self, "실패", str(e))
