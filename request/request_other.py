@@ -52,19 +52,17 @@ def get_year_prices(base_symbol_prefix, price_index):
 
 
 if __name__ == '__main__':
-        
-    # --- 실행 예시 ---
-    # PTA (내수선물 nf_TA, 현재가 인덱스 8)
-    pta_year_data = get_year_prices("nf_TA", 8)
 
-    print("--- 1년치 오늘자 PTA 가격 리스트 ---")
-    for item in pta_year_data:
-        print(f"{item['month']} : {item['price']}")
+    headers = {"Referer": "http://finance.sina.com.cn", "User-Agent": "Mozilla/5.0"}
 
-    pta_year_data = get_year_prices("nf_TA", 10)
-    print("--- 1년치 어제자 PTA 가격 리스트 ---")
-    for item in pta_year_data:
-        print(f"{item['month']} : {item['price']}")
+    for symbol in ["nf_TA2605", "nf_PX2605"]:
+        url = f"https://hq.sinajs.cn/list={symbol}"
+        r = requests.get(url, headers=headers)
+        content = r.text.split('"')[1]
+        print(f"--- {symbol} 원본 응답 ---")
+        for i, v in enumerate(content.split(',')):
+            print(f"[{i}] {v}")
+        print()
 
 
     exit()

@@ -46,9 +46,9 @@ class Page2(QWidget):
         main_months = {1, 3, 5, 9}
         valid_targets = []
         
-        # 0(현재달)부터 12(내년 이맘때)까지 총 13개월 탐색
-        for i in range(13):
-            check_date = now + relativedelta(months=i)
+        # 1(다음달)부터 12까지 탐색 (당월 제외, page1과 동일 기준)
+        for i in range(12):
+            check_date = now + relativedelta(months=i+1)
             y, m = check_date.year, check_date.month
             
             is_main = m in main_months
@@ -66,9 +66,9 @@ class Page2(QWidget):
     def load_all_market_data(self):
         """데이터 로드 및 테이블 출력"""
         pta_t_raw = get_year_prices("nf_TA", 8)
-        pta_y_raw = get_year_prices("nf_TA", 10)
+        pta_y_raw = get_year_prices("nf_TA", 5)
         px_t_raw = get_year_prices("nf_PX", 8)
-        px_y_raw = get_year_prices("nf_PX", 10)
+        px_y_raw = get_year_prices("nf_PX", 5)
 
         def merge_data(t_list, y_list):
             merged = {}
