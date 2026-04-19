@@ -7,7 +7,7 @@ from PyQt6.QtCore import Qt, QTimer, QEvent
 from dateutil.relativedelta import relativedelta
 
 import config
-from request.request_other import get_year_prices 
+from request.request_other import get_year_prices
 from request.request_sgx import get_year_sgx
 from screenshot import take_screenshot
 
@@ -120,6 +120,9 @@ class Page1(QWidget):
         # PX Futures(7)와 PTA Futures(8)는 소수점 0자리 적용
         if col in [7, 8]:
             precision = 0
+        # USD/CNH(11)는 소수점 4자리 적용
+        elif col == 11:
+            precision = 4
             
         item = self.table.item(row, col)
         if not item:

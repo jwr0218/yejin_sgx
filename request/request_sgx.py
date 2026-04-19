@@ -35,9 +35,26 @@ def get_driver():
         driver_dir = os.path.dirname(driver_path)
         is_win = platform.system() == "Windows"
         driver_name = "chromedriver.exe" if is_win else "chromedriver"
-        service = Service(os.path.join(driver_dir, driver_name))
+        driver_bin = os.path.join(driver_dir, driver_name)
+
+        # webdriver_manager가 THIRD_PARTY_NOTICES 파일을 반환하는 버그 보정
+        if not os.path.exists(driver_bin) or os.path.basename(driver_path).startswith("THIRD_PARTY"):
+            for root, _, files in os.walk(driver_dir):
+                if driver_name in files:
+                    driver_bin = os.path.join(root, driver_name)
+                    break
+
+        # 실행 권한 보장
+        if not is_win:
+            try:
+                os.chmod(driver_bin, 0o755)
+            except Exception:
+                pass
+
+        service = Service(driver_bin)
         _driver = webdriver.Chrome(service=service, options=options)
-    except Exception:
+    except Exception as e:
+        print(f"[chromedriver 자동설치 실패] {type(e).__name__}: {e}")
         # 방법 2: 실패하면 Selenium 내장 매니저로 시도
         _driver = webdriver.Chrome(options=options)
 

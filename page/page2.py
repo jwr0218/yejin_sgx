@@ -66,9 +66,9 @@ class Page2(QWidget):
     def load_all_market_data(self):
         """데이터 로드 및 테이블 출력"""
         pta_t_raw = get_year_prices("nf_TA", 8)
-        pta_y_raw = get_year_prices("nf_TA", 5)
+        pta_y_raw = get_year_prices("nf_TA", 27)
         px_t_raw = get_year_prices("nf_PX", 8)
-        px_y_raw = get_year_prices("nf_PX", 5)
+        px_y_raw = get_year_prices("nf_PX", 27)
 
         def merge_data(t_list, y_list):
             merged = {}
