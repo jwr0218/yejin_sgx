@@ -30,16 +30,19 @@ def get_year_sgx():
         if item.get('current-trading-session') != '0':
             continue
 
-        delivery = item.get('delivery-month', '')
+        delivery = item.get('delivery-month', '')  # "2026-05"
+        # Sina API와 동일한 "YY/MM" 형식으로 변환
+        try:
+            yy, mm = delivery.split('-')
+            month = f"{yy[2:]}/{mm}"  # "26/05"
+        except Exception:
+            month = delivery
+
         price_val = item.get('last-traded-price-adj')
+        price = 'N/A' if price_val is None else str(price_val)
 
-        if price_val is None:
-            price = 'N/A'
-        else:
-            price = str(price_val)
-
-        print(f"  month={delivery}, price={price}")
-        results.append({"month": delivery, "price": price})
+        print(f"  month={month}, price={price}")
+        results.append({"month": month, "price": price})
 
         if len(results) >= 12:
             break
