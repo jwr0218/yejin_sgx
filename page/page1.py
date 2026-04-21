@@ -181,21 +181,23 @@ class Page1(QWidget):
         brent_oil = get_year_prices("hf_OIL", 8)
         sgx_value = get_year_sgx()
 
-        # 당월 데이터를 건너뛰고 다음 달(인덱스 1)부터 테이블(인덱스 0)에 매핑
+        # Sina API(brent/px/pta)는 현재 월(index 0)부터 시작하므로 +1로 다음 달부터 매핑
+        # SGX API는 이미 다음 달(index 0 = May)부터 시작하므로 offset 없이 그대로 매핑
         for row in range(12):
-            data_idx = row + 1  # 💡 핵심: API 데이터에서 1번 인덱스(다음 달)부터 가져옴
+            sina_idx = row + 1
+            sgx_idx = row
 
-            if data_idx < len(brent_oil) and brent_oil[data_idx]['price'] != 'N/A':
-                self.set_val(row, 1, float(brent_oil[data_idx]['price']))
-            
-            if data_idx < len(px_future_data) and px_future_data[data_idx]['price'] != 'N/A':
-                self.set_val(row, 7, float(px_future_data[data_idx]['price']))
-            
-            if data_idx < len(pta_data) and pta_data[data_idx]['price'] != 'N/A':
-                self.set_val(row, 8, float(pta_data[data_idx]['price']))
-            
-            if data_idx < len(sgx_value) and sgx_value[data_idx]['price'] != 'N/A':
-                self.set_val(row, 11, float(sgx_value[data_idx]['price']))
+            if sina_idx < len(brent_oil) and brent_oil[sina_idx]['price'] != 'N/A':
+                self.set_val(row, 1, float(brent_oil[sina_idx]['price']))
+
+            if sina_idx < len(px_future_data) and px_future_data[sina_idx]['price'] != 'N/A':
+                self.set_val(row, 7, float(px_future_data[sina_idx]['price']))
+
+            if sina_idx < len(pta_data) and pta_data[sina_idx]['price'] != 'N/A':
+                self.set_val(row, 8, float(pta_data[sina_idx]['price']))
+
+            if sgx_idx < len(sgx_value) and sgx_value[sgx_idx]['price'] != 'N/A':
+                self.set_val(row, 11, float(sgx_value[sgx_idx]['price']))
                 item = self.table.item(row, 11)
                 if item: item.setForeground(QColor("black"))
             else:
