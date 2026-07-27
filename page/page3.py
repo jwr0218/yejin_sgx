@@ -19,7 +19,7 @@ except ImportError:
 class Page3(QWidget):
     def __init__(self):
         super().__init__()
-        self.months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        self.months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
         # 수식용 상수
         self.CONST_PX_PTA = 0.655 * 1.13 * 1.02
         self.CONST_ZCE_SGX = 1.13 * 1.02
@@ -166,7 +166,7 @@ class Page3(QWidget):
     def on_fetch_clicked(self, cid):
         calc = self.calculators[cid]
         mode = calc['mode']
-        selected_month = calc['month_cb'].currentText().lower()
+        selected_month = calc['month_cb'].currentText().upper()
         month_idx = str(self.months.index(selected_month) + 1).zfill(2)
         
         try:

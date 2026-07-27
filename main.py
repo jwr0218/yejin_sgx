@@ -18,7 +18,7 @@ class MainApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Market Analysis Tool")
-        self.resize(1100, 600)
+        self.resize(1250, 800)
 
         # 중앙 위젯과 메인 레이아웃
         main_widget = QWidget()
