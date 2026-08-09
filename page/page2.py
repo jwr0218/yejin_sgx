@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt
 from dateutil.relativedelta import relativedelta
 
 import config
-from request.request_other import get_year_daily_close
+from request.request_other import get_year_prices, get_year_prev_close
 from screenshot import take_screenshot
 
 class Page2(QWidget):
@@ -113,19 +113,32 @@ class Page2(QWidget):
 
     def load_all_market_data(self):
         """데이터 로드 및 테이블 출력"""
-        # 일별 K차트의 종가(c)를 직접 사용 (실시간 시세의 '결제가'와 혼동 방지)
-        pta_raw = get_year_daily_close("TA")
-        px_raw = get_year_daily_close("PX")
+        # 오늘 거래가(tday)는 기존 실시간 시세 API, 전일 종가(yday)는 일별 K차트에서
+        # 날짜 검증된 값으로 각각 받아와 합친다 (전일 결제가 혼동 방지).
+        pta_t_raw = get_year_prices("nf_TA", 8)
+        px_t_raw = get_year_prices("nf_PX", 8)
+        pta_yday = get_year_prev_close("TA")
+        px_yday = get_year_prev_close("PX")
 
-        def to_data_dict(raw):
+        def to_data_dict(t_raw, yday_dict):
             merged = {}
-            for key, info in raw.items():
-                if info['tday'] is not None and info['yday'] is not None:
-                    merged[key] = {'tday': info['tday'], 'yday': info['yday']}
+            for item in t_raw:
+                if item['month'] == "N/A":
+                    continue
+                parts = item['month'].split('/')
+                yy, mm = int(parts[0]) % 100, int(parts[1])
+
+                yday = yday_dict.get((yy, mm))
+                if yday is None:
+                    continue
+
+                # 오늘자 거래가가 아직 없으면(N/A) 0으로 표시하되 행은 유지
+                tday = float(item['price']) if item['price'] != "N/A" else 0
+                merged[(yy, mm)] = {'tday': tday, 'yday': yday}
             return merged
 
-        pta_data = to_data_dict(pta_raw)
-        px_data = to_data_dict(px_raw)
+        pta_data = to_data_dict(pta_t_raw, pta_yday)
+        px_data = to_data_dict(px_t_raw, px_yday)
 
         self.pta_data = pta_data
         self.px_data = px_data

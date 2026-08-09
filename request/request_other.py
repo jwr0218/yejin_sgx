@@ -9,33 +9,40 @@ _KLINE_URL = "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_x=
 _HEADERS = {"Referer": "http://finance.sina.com.cn", "User-Agent": "Mozilla/5.0"}
 
 
-def _fetch_daily_close(session, yy, mm, symbol):
+def _fetch_prev_close(session, yy, mm, symbol):
     try:
         resp = session.get(_KLINE_URL.format(symbol=symbol), headers=_HEADERS, timeout=10)
         match = re.search(r'\((\[.*\]|null)\)', resp.text)
         if not match or match.group(1) == 'null':
-            return (yy, mm), {"tday": None, "yday": None}
+            return (yy, mm), None
 
         bars = json.loads(match.group(1))
         if len(bars) == 0:
-            return (yy, mm), {"tday": None, "yday": None}
+            return (yy, mm), None
 
-        tday_close = float(bars[-1]['c'])
-        yday_close = float(bars[-2]['c']) if len(bars) >= 2 else None
-        return (yy, mm), {"tday": tday_close, "yday": yday_close}
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+        # 마지막 봉이 오늘 날짜면 그 이전 봉이 '전일 종가', 아직 오늘 봉이 없으면
+        # 마지막 봉 자체가 '전일(=가장 최근 완료된 거래일) 종가'가 된다.
+        if bars[-1]['d'] == today_str:
+            prev_close = float(bars[-2]['c']) if len(bars) >= 2 else None
+        else:
+            prev_close = float(bars[-1]['c'])
+
+        return (yy, mm), prev_close
     except Exception as e:
         print(f"K-line Error ({symbol}): {e}")
-        return (yy, mm), {"tday": None, "yday": None}
+        return (yy, mm), None
 
 
-def get_year_daily_close(product_code, months=12):
+def get_year_prev_close(product_code, months=12):
     """
     product_code: 'TA'(PTA), 'PX' 등 (내수 선물 심볼, 'nf_' 접두어 제외)
 
-    실시간 시세(hq.sinajs.cn)의 인덱스 8/10은 '현재가/전일 결제가'라서
-    실제 '전일 종가'와 다를 수 있음 (결제가 != 종가).
+    실시간 시세(hq.sinajs.cn)의 인덱스 10은 '전일 결제가'라서 실제 '전일 종가'와 다름.
     일별 K차트(getDailyKLine)는 날짜별 종가(c)가 명확히 구분되므로,
-    월물별로 마지막 두 거래일의 종가를 금일(tday)/전일(yday)로 사용한다.
+    월물별로 '오늘 이전 마지막 거래일'의 종가만 정확히 가져온다.
+    (오늘의 실시간 거래가는 get_year_prices로 별도 조회)
 
     월물별로 요청이 각각 필요해 12개월치를 순차 호출하면 느리므로,
     스레드풀로 동시에 요청해 응답 시간을 단축한다.
@@ -51,7 +58,7 @@ def get_year_daily_close(product_code, months=12):
     results = {}
     with requests.Session() as session, \
          concurrent.futures.ThreadPoolExecutor(max_workers=len(targets)) as executor:
-        futures = [executor.submit(_fetch_daily_close, session, yy, mm, symbol) for yy, mm, symbol in targets]
+        futures = [executor.submit(_fetch_prev_close, session, yy, mm, symbol) for yy, mm, symbol in targets]
         for future in concurrent.futures.as_completed(futures):
             key, value = future.result()
             results[key] = value
