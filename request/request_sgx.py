@@ -54,9 +54,5 @@ def get_year_sgx():
     return results
 
 
-def turn_off_driver():
-    pass
-
-
 if __name__ == '__main__':
     print(get_year_sgx())

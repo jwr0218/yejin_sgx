@@ -1,6 +1,4 @@
 # .gitignore
-chromedriver
-chromedriver.exe
 __pycache__/
 build/
 dist/
