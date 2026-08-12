@@ -10,8 +10,7 @@ setup(
     packages=find_packages(), 
     install_requires=[
         "requests",
-        "selenium",
-        "datetime",
+        "python-dateutil",
         "PyQt6"
     ],
 )

@@ -1,6 +1,7 @@
 import datetime
 import csv
 import os
+import re
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QEvent
@@ -25,7 +26,7 @@ class Page1(QWidget):
             "PX-PTA SPREAD", "ZCEPX-SGXPX", "USD/CNH", "BOX"
         ]
         
-        self.table = QTableWidget(11, len(self.headers))
+        self.table = QTableWidget(11, len(self.headers))   # 당월 제외, 다음 달부터 11개월
         self.table.setHorizontalHeaderLabels(self.headers)
         
         # UI 초기화 및 스타일 적용
@@ -56,6 +57,10 @@ class Page1(QWidget):
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
+        self.legend = QLabel("회색 숫자 = 거래 종료(만기 등)된 월물. 괄호 안 (MM-DD)가 마지막으로 거래된 날이며, 표시된 값은 그날의 최종 가격입니다. 예) Brent는 인도월 2개월 전에 만기되어 최근월물이 이미 종료된 상태일 수 있습니다.")
+        self.legend.setStyleSheet("color: #757575; font-size: 11px;")
+        self.legend.setWordWrap(True)
+        layout.addWidget(self.legend)
 
         layout.addLayout(btn_layout)
         
@@ -72,7 +77,7 @@ class Page1(QWidget):
         return super().eventFilter(source, event)
 
     def init_table_defaults(self):
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             for col in [3, 5]: 
                 self.set_val(row, col, 0)
 
@@ -86,10 +91,16 @@ class Page1(QWidget):
         bold_months = [1, 3, 5, 7, 9, 11]
         color_months = [1, 5, 9]
 
-        for i in range(11):
-            # 변경점: 당월 제외, 다음 달부터 표시되도록 i + 1을 적용합니다.
-            target_date = now + relativedelta(months=i + 1) 
+        # 각 행이 어느 월물인지를 "YY/MM" 키로 보관해 둔다.
+        # 라벨과 데이터 매핑이 같은 계산에서 나오도록 하기 위한 것으로,
+        # 이 목록이 시세를 붙일 때의 유일한 기준이 된다. (load_all_market_data 참조)
+        self.row_months = []
+
+        for i in range(self.table.rowCount()):
+            # 당월 제외, 다음 달부터 표시한다.
+            target_date = now + relativedelta(months=i + 1)
             month_int = target_date.month
+            self.row_months.append(target_date.strftime("%y/%m"))
             
             # 1. 날짜 형식 수정: 26-JAN
             month_str = target_date.strftime("%y-%b").upper()
@@ -136,6 +147,26 @@ class Page1(QWidget):
             item.setBackground(QColor("#F0F4F8"))
         self.table.blockSignals(False)
 
+    def _apply_quote_state(self, row, col, info):
+        """
+        거래 정지(만기 등) 월물의 셀을 회색 + 툴팁으로 구분 표시한다.
+        재로딩 시 살아난 월물의 표시가 남지 않도록 정상 상태도 명시적으로 되돌린다.
+        """
+        item = self.table.item(row, col)
+        if not item:
+            return
+        if info.get('stale'):
+            date = info.get('date') or ""
+            item.setForeground(QColor("#9E9E9E"))
+            # 마감일을 셀에 직접 노출한다(툴팁은 올려봐야 보이므로).
+            # 연도를 뺀 MM-DD만 붙여 열 폭을 넘기지 않게 한다.
+            if date:
+                item.setText(f"{item.text()} ({date[5:]})")
+            item.setToolTip(f"거래 종료(만기 등)로 실시간 시세가 아님\n마지막 시세 일자: {date}")
+        else:
+            item.setForeground(QColor("black"))
+            item.setToolTip("")
+
     def on_item_changed(self, item):
         col = item.column()
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)  # 추가
@@ -144,7 +175,7 @@ class Page1(QWidget):
 
     def calculate_all_logic(self):
         """계단식 로직 및 수식 계산"""
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             if row > 0:
                 self.set_val(row, 2, self.get_val(row-1, 2) - self.get_val(row-1, 3)) 
                 self.set_val(row, 4, self.get_val(row-1, 4) - self.get_val(row-1, 5)) 
@@ -159,15 +190,21 @@ class Page1(QWidget):
             self.set_val(row, 9, pta_future - (self.CONST_PX_PTA * px * usd_cnh))
             self.set_val(row, 10, px_future - (px * self.CONST_ZCE_SGX * usd_cnh))
 
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             self.set_val(row, 12, self.get_val(row, 6) - self.get_val(row+1, 6))
 
+    # 거래 종료 월물은 셀에 "84.75 (08-01)"처럼 마감일이 함께 표시되므로,
+    # 앞쪽 숫자만 뽑아 계산에 쓴다. (PX/PTA Futures 열은 수식에 실제로 사용됨)
+    _NUM_RE = re.compile(r'-?[\d,]+(?:\.\d+)?')
+
     def get_val(self, row, col):
-        if row < 0 or row >= 12: return 0.0
+        if row < 0 or row >= self.table.rowCount(): return 0.0
         item = self.table.item(row, col)
         if not item or not item.text() or item.text() == "N/A": return 0.0
+        match = self._NUM_RE.search(item.text())
+        if not match: return 0.0
         try:
-            return float(item.text().replace(',', ''))
+            return float(match.group().replace(',', ''))
         except ValueError:
             return 0.0
 
@@ -178,35 +215,43 @@ class Page1(QWidget):
         # 1. API 데이터 기본 로드
         pta_data = get_year_prices("nf_TA", 8)
         px_future_data = get_year_prices("nf_PX", 8)
-        brent_oil = get_year_prices("hf_OIL", 8)
+        # hf_(외방 선물)는 nf_(내수 선물)와 필드 배열이 달라 현재가가 0번이다.
+        # 8번은 '전일 결제가'라 장중에 값이 갱신되지 않는다.
+        brent_oil = get_year_prices("hf_OIL", 0)
         sgx_value = get_year_sgx()
 
-        # Sina API(brent/px/pta)는 현재 월(index 0)부터 시작하므로 +1로 다음 달부터 매핑
-        # SGX API는 이미 다음 달(index 0 = May)부터 시작하므로 offset 없이 그대로 매핑
-        for row in range(12):
-            sina_idx = row + 1
-            sgx_idx = row
+        # 시세는 배열 순서가 아니라 '당월 기준 +N개월' 월물 키로 찾아 붙인다.
+        # 응답이 어느 월물부터 시작하는지는 소스마다 다르고, 특히 SGX는 당월물
+        # 만기 여부에 따라 첫 항목이 매달 바뀌므로 인덱스로 맞추면 어긋난다.
+        # self.row_months는 행 라벨을 만든 계산 그대로이므로 라벨과 항상 일치한다.
+        def by_month(rows):
+            return {r['month']: r for r in rows if r.get('month') not in (None, 'N/A')}
 
-            if sina_idx < len(brent_oil) and brent_oil[sina_idx]['price'] != 'N/A':
-                self.set_val(row, 1, float(brent_oil[sina_idx]['price']))
+        sources = {1: by_month(brent_oil), 7: by_month(px_future_data),
+                   8: by_month(pta_data), 11: by_month(sgx_value)}
 
-            if sina_idx < len(px_future_data) and px_future_data[sina_idx]['price'] != 'N/A':
-                self.set_val(row, 7, float(px_future_data[sina_idx]['price']))
+        for row, key in enumerate(self.row_months):
+            for col in (1, 7, 8):
+                info = sources[col].get(key)
+                if info and info['price'] != 'N/A':
+                    self.set_val(row, col, float(info['price']))
+                    # 만기 등으로 거래가 멈춘 월물은 마지막 체결가가 그대로 내려오므로
+                    # 실시간 시세와 눈으로 구분되도록 표시해 둔다.
+                    self._apply_quote_state(row, col, info)
 
-            if sina_idx < len(pta_data) and pta_data[sina_idx]['price'] != 'N/A':
-                self.set_val(row, 8, float(pta_data[sina_idx]['price']))
-
-            if sgx_idx < len(sgx_value) and sgx_value[sgx_idx]['price'] != 'N/A':
-                self.set_val(row, 11, float(sgx_value[sgx_idx]['price']))
+            sgx_info = sources[11].get(key)
+            if sgx_info and sgx_info['price'] != 'N/A':
+                self.set_val(row, 11, float(sgx_info['price']))
                 item = self.table.item(row, 11)
                 if item: item.setForeground(QColor("black"))
             else:
                 self.set_val(row, 11, 0)
 
         # 2. [Pass 1] 순방향 보정: 앞 칸(위)의 값을 아래로 전파 (앞 칸 우선 논리)
-        check = [False for i in range(1,13)]
+        rows = self.table.rowCount()
+        check = [False] * (rows + 1)   # check[row+1] 접근이 있어 +1 여유
 
-        for row in range(1, 12): # 1번 행부터 시작
+        for row in range(1, rows): # 1번 행부터 시작
             if self.get_val(row, 11) == 0 :
                 prev_v = self.get_val(row - 1, 11)
                 if prev_v != 0 and check[row-1] == False:
@@ -216,7 +261,7 @@ class Page1(QWidget):
                     if item: item.setForeground(QColor("blue"))
 
         # 3. [Pass 2] 역방향 보정: 여전히 0인 칸은 뒷 칸(아래)의 값을 위로 전파
-        for row in range(10, -1, -1): # 10번 행부터 0번 행까지 거꾸로
+        for row in range(rows - 2, -1, -1): # 마지막 직전 행부터 0번 행까지 거꾸로
             if self.get_val(row, 11) == 0:
                 next_v = self.get_val(row + 1, 11)
                 if next_v != 0 and check[row+1] == False:
@@ -285,7 +330,7 @@ class Page1(QWidget):
         self.table.blockSignals(True)
         
         # 1. 모든 값 0으로 초기화
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             for col in range(1, len(self.headers)):
                 self.set_val(row, col, 0)
         
@@ -294,7 +339,7 @@ class Page1(QWidget):
         self.init_month_labels() 
         
         # 3. Spread 열(3번, 5번 컬럼)을 노란색으로 변경 (하이라이트 시작)
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             for col in [3, 5]: # MOPJ SPREAD, PX SPREAD
                 item = self.table.item(row, col)
                 if item:
@@ -311,7 +356,7 @@ class Page1(QWidget):
         self.table.blockSignals(True)
         
         # Spread 열의 노란색을 지우기 위해 배경색 초기화 (기본 흰색)
-        for row in range(11):
+        for row in range(self.table.rowCount()):
             for col in [3, 5]:
                 item = self.table.item(row, col)
                 if item:
@@ -335,7 +380,7 @@ class Page1(QWidget):
             with open(path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
                 writer.writerow(self.headers)
-                for row in range(11):
+                for row in range(self.table.rowCount()):
                     row_data = [self.table.item(row, col).text() if self.table.item(row, col) else "" for col in range(len(self.headers))]
                     writer.writerow(row_data)
             os.startfile(os.path.abspath(path))

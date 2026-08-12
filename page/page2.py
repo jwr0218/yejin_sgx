@@ -26,6 +26,11 @@ class Page2(QWidget):
 
         layout.addWidget(self.table, 3)
 
+        self.legend = QLabel("⚠ 회색 행 = 거래 종료(만기 등) 월물. 라벨 옆 (MM-DD)가 마지막으로 거래된 날이며, 표시된 값은 그날의 최종 가격입니다.")
+        self.legend.setStyleSheet("color: #757575; font-size: 11px;")
+        self.legend.setWordWrap(True)
+        layout.addWidget(self.legend)
+
         btn_layout = QHBoxLayout()
         self.btn_load = QPushButton("데이터 불러오기")
         self.btn_load.clicked.connect(self.load_all_market_data)
@@ -134,7 +139,9 @@ class Page2(QWidget):
 
                 # 오늘자 거래가가 아직 없으면(N/A) 0으로 표시하되 행은 유지
                 tday = float(item['price']) if item['price'] != "N/A" else 0
-                merged[(yy, mm)] = {'tday': tday, 'yday': yday}
+                merged[(yy, mm)] = {'tday': tday, 'yday': yday,
+                                    'date': item.get('date'),
+                                    'stale': bool(item.get('stale'))}
             return merged
 
         pta_data = to_data_dict(pta_t_raw, pta_yday)
@@ -172,7 +179,9 @@ class Page2(QWidget):
                 
                 # 라벨 형식을 YY-MONTH (예: PTA 26-JAN) 로 변경
                 label = f"{name} {yy}-{self._month_name(mm)}"
-                self._insert_row(self.table, label, info['yday'], info['tday'])
+                self._insert_row(self.table, label, info['yday'], info['tday'],
+                                 stale=info.get('stale'), note=self._stale_note(info),
+                                 closed_on=self._stale_date(info))
 
         # 2. 스프레드 항목 추가 (데이터가 존재하는 경우에만)
         spread_targets = [
@@ -191,21 +200,31 @@ class Page2(QWidget):
                 s_yday = v1['yday'] - v2['yday']
                 s_tday = v1['tday'] - v2['tday']
 
-                # 스프레드 이름 (예: PTA 1/2)
-                self._insert_row(self.table, f"{name} {s['label']}", s_yday, s_tday)
+                # 스프레드 이름 (예: PTA 1/2) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
+                self._insert_row(self.table, f"{name} {s['label']}", s_yday, s_tday,
+                                 stale=v1.get('stale') or v2.get('stale'),
+                                 note=self._stale_note(v1, v2),
+                                 closed_on=self._stale_date(v1, v2))
 
-        # 3. 당월(m) 포함 근월 변동폭: m/m+1, m+1/m+2, m+1/m+3
+        # 3. 근월 변동폭: m+1/m+2, m+2/m+3, m+1/m+3
         self.add_current_near_spread(name, data_dict)
 
     def add_current_near_spread(self, name, data_dict):
-        """당월(m)부터 m+3까지 4개월 데이터를 바탕으로 m/m+1, m+1/m+2, m+1/m+3 스프레드 표시"""
-        now = datetime.datetime.now()
-        months = []
-        for i in range(4):
-            d = now + relativedelta(months=i)
-            months.append({"yy": d.year % 100, "mm": d.month, "info": data_dict.get((d.year % 100, d.month))})
+        """
+        당월(m) 기준 익월물 3개(m+1, m+2, m+3)로 아래 스프레드를 표시한다.
+            m+1/m+2, m+2/m+3, m+1/m+3
 
-        pairs = [(0, 1), (1, 2), (1, 3)]  # m/m+1, m+1/m+2, m+1/m+3
+        relativedelta가 월 덧셈 시 연도를 함께 넘겨주므로 12월을 넘어가면
+        자동으로 다음 해 1월이 된다. (예: 11월 -> m+2는 다음 해 1월)
+        """
+        now = datetime.datetime.now()
+        months = {}
+        for i in (1, 2, 3):
+            d = now + relativedelta(months=i)
+            yy, mm = d.year % 100, d.month
+            months[i] = {"yy": yy, "mm": mm, "info": data_dict.get((yy, mm))}
+
+        pairs = [(1, 2), (2, 3), (1, 3)]  # m+1/m+2, m+2/m+3, m+1/m+3
         for i1, i2 in pairs:
             a, b = months[i1], months[i2]
             if a["info"] is None or b["info"] is None:
@@ -213,15 +232,24 @@ class Page2(QWidget):
             s_yday = a["info"]["yday"] - b["info"]["yday"]
             s_tday = a["info"]["tday"] - b["info"]["tday"]
             label = f"{name} {a['mm']:02d}/{b['mm']:02d}"
-            self._insert_row(self.table, label, s_yday, s_tday)
+            self._insert_row(self.table, label, s_yday, s_tday,
+                             stale=a["info"].get('stale') or b["info"].get('stale'),
+                             note=self._stale_note(a["info"], b["info"]),
+                             closed_on=self._stale_date(a["info"], b["info"]))
 
-    def _insert_row(self, table, label, yday, tday):
+    def _insert_row(self, table, label, yday, tday, stale=False, note="", closed_on=""):
+        """
+        stale=True는 만기 등으로 거래가 멈춘 월물(마지막 체결가가 그대로 남아 있는 상태).
+        값은 그대로 보여주되 회색 처리 + ⚠ + 마감일 표시로 실시간 시세와 구분한다.
+        """
         row = table.rowCount()
         table.insertRow(row)
 
-        # Item 이름
+        # Item 이름 (거래 종료면 마감일을 MM-DD로 함께 노출)
+        if stale:
+            label = f"⚠ {label}" + (f" ({closed_on[5:]})" if closed_on else "")
         item_label = QTableWidgetItem(label)
-        item_label.setBackground(QColor("#D9EAD3"))
+        item_label.setBackground(QColor("#E0E0E0") if stale else QColor("#D9EAD3"))
         table.setItem(row, 0, item_label)
 
         # yday, tday
@@ -244,7 +272,28 @@ class Page2(QWidget):
 
         for i in range(5):
             it = table.item(row, i)
-            if it: it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if it:
+                it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if stale:
+                    # +/- 의 빨강/파랑보다 뒤에 적용해 회색이 최종적으로 남도록 한다.
+                    it.setForeground(QColor("#9E9E9E"))
+                    it.setToolTip(note)
+
+    def _stale_dates(self, *infos):
+        """거래가 멈춘 월물들의 마지막 시세 일자 목록 (오래된 순)."""
+        return sorted({i['date'] for i in infos if i.get('stale') and i.get('date')})
+
+    def _stale_date(self, *infos):
+        """라벨에 붙일 마감일. 스프레드는 다리 중 더 오래 멈춘 쪽을 대표로 쓴다."""
+        dates = self._stale_dates(*infos)
+        return dates[0] if dates else ""
+
+    def _stale_note(self, *infos):
+        """거래가 멈춘 월물의 마지막 시세 일자를 툴팁 문구로 만든다."""
+        dates = self._stale_dates(*infos)
+        if not dates:
+            return ""
+        return "거래 종료(만기 등)로 실시간 시세가 아님\n마지막 시세 일자: " + ", ".join(dates)
 
     def _month_name(self, m):
         return ["", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][m]
@@ -285,4 +334,7 @@ class Page2(QWidget):
         s_yday = v1['yday'] - v2['yday']
         s_tday = v1['tday'] - v2['tday']
         self.compare_table.setRowCount(0)
-        self._insert_row(self.compare_table, label, s_yday, s_tday)
+        self._insert_row(self.compare_table, label, s_yday, s_tday,
+                         stale=v1.get('stale') or v2.get('stale'),
+                         note=self._stale_note(v1, v2),
+                         closed_on=self._stale_date(v1, v2))

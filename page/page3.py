@@ -188,6 +188,10 @@ class Page3(QWidget):
                 m_n = item.get('month', '').split('/')[-1]
                 m_str = self.months[int(m_n)-1].upper() if m_n.isdigit() else "???"
                 display_txt = f"{p}-{m_str}"
+                # 거래 정지(만기 등) 월물은 마지막 체결가라 실시간 시세와 구분이 필요하다.
+                # 숫자 앞부분은 그대로 두어 parse_value 파싱에는 영향이 없다.
+                if item.get('stale'):
+                    display_txt += f" ⚠거래정지({item.get('date')})"
                 calc['future_cb'].addItem(display_txt)
                 if m_n == month_idx: f_target_text = display_txt
 
