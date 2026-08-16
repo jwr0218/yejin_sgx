@@ -166,17 +166,17 @@ class Page2(QWidget):
 
     def add_product_rows(self, name, data_dict, target_list):
         """동적 타겟 리스트를 기반으로 행 추가 (형식: 26-JAN)"""
-        active_info = {} 
+        active_info = {}
 
         # 1. 월물별 데이터 출력
         for t in target_list:
             yy = t['year'] % 100  # 2026 -> 26
             mm = t['month']
-            
+
             if (yy, mm) in data_dict:
                 info = data_dict[(yy, mm)]
-                active_info[mm] = info 
-                
+                active_info[mm] = {**info, 'yy': yy}
+
                 # 라벨 형식을 YY-MONTH (예: PTA 26-JAN) 로 변경
                 label = f"{name} {yy}-{self._month_name(mm)}"
                 self._insert_row(self.table, label, info['yday'], info['tday'],
@@ -184,34 +184,76 @@ class Page2(QWidget):
                                  closed_on=self._stale_date(info))
 
         # 2. 스프레드 항목 추가 (데이터가 존재하는 경우에만)
+        # 라벨은 MonthYear/MonthYear 형식(예: JAN27/MAR27)으로 표시.
+        # 1월은 시점에 따라 다음 해로 넘어가 있을 수 있어 m1/m2 숫자 순서만으로는
+        # 근월물이 항상 앞에 온다고 보장할 수 없으므로, 실제 연도까지 비교해 정렬한다.
         spread_targets = [
-            {"label": "1/2", "m1": 1, "m2": 2},
-            {"label": "1/3", "m1": 1, "m2": 3},
-            {"label": "3/5", "m1": 3, "m2": 5},
-            {"label": "1/5", "m1": 1, "m2": 5},
-            {"label": "5/9", "m1": 5, "m2": 9},
-            {"label": "1/9", "m1": 1, "m2": 9}
+            {"m1": 1, "m2": 3},
+            {"m1": 1, "m2": 9},
+            {"m1": 3, "m2": 5},
+            {"m1": 1, "m2": 5},
+            {"m1": 5, "m2": 9},
         ]
+
+        month_year_label = self._month_year_label
+
+        # 각 스프레드를 근월 다리의 (연도,월) 기준 정렬 키와 함께 모아뒀다가,
+        # 전부 계산한 뒤 근월이 빠른 순서대로 한꺼번에 삽입한다.
+        spread_rows = []
 
         for s in spread_targets:
             m1, m2 = s["m1"], s["m2"]
             if m1 in active_info and m2 in active_info:
                 v1, v2 = active_info[m1], active_info[m2]
-                s_yday = v1['yday'] - v2['yday']
-                s_tday = v1['tday'] - v2['tday']
 
-                # 스프레드 이름 (예: PTA 1/2) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
-                self._insert_row(self.table, f"{name} {s['label']}", s_yday, s_tday,
-                                 stale=v1.get('stale') or v2.get('stale'),
-                                 note=self._stale_note(v1, v2),
-                                 closed_on=self._stale_date(v1, v2))
+                # 근월물이 항상 앞에 오도록 (연도, 월) 기준으로 비교해 정렬
+                if (v1['yy'], m1) <= (v2['yy'], m2):
+                    near_m, near_v, far_m, far_v = m1, v1, m2, v2
+                else:
+                    near_m, near_v, far_m, far_v = m2, v2, m1, v1
 
-        # 3. 근월 변동폭: m+1/m+2, m+2/m+3, m+1/m+3
-        self.add_current_near_spread(name, data_dict)
+                s_yday = near_v['yday'] - far_v['yday']
+                s_tday = near_v['tday'] - far_v['tday']
 
-    def add_current_near_spread(self, name, data_dict):
+                label = f"{month_year_label(near_m, near_v['yy'])}/{month_year_label(far_m, far_v['yy'])}"
+                # 스프레드 이름 (예: PTA JAN27/MAR27) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
+                spread_rows.append({
+                    'sort_key': (near_v['yy'], near_m),
+                    'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
+                    'stale': near_v.get('stale') or far_v.get('stale'),
+                    'note': self._stale_note(near_v, far_v),
+                    'closed_on': self._stale_date(near_v, far_v),
+                })
+
+        # 9/1 스프레드: "다음 해로 넘어가는 9월→1월" 스프레드는 항상 연도가 바뀌도록 고정
+        # (active_info의 1월은 현재 시점에 따라 9월보다 앞선 해일 수도 있어 그대로 쓰면 안 됨)
+        if 9 in active_info:
+            sep_info = active_info[9]
+            jan_yy = (sep_info['yy'] + 1) % 100
+            jan_info = data_dict.get((jan_yy, 1))
+            if jan_info is not None:
+                s_yday = sep_info['yday'] - jan_info['yday']
+                s_tday = sep_info['tday'] - jan_info['tday']
+                label = f"{month_year_label(9, sep_info['yy'])}/{month_year_label(1, jan_yy)}"
+                spread_rows.append({
+                    'sort_key': (sep_info['yy'], 9),
+                    'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
+                    'stale': sep_info.get('stale') or jan_info.get('stale'),
+                    'note': self._stale_note(sep_info, jan_info),
+                    'closed_on': self._stale_date(sep_info, jan_info),
+                })
+
+        # 3. 근월 변동폭: m+1/m+2, m+2/m+3, m+1/m+3 (고정 스프레드와 한데 모아서 같이 정렬)
+        spread_rows.extend(self._build_near_spread_rows(name, data_dict))
+
+        # 근월(연도,월)이 빠른 것부터 위에 오도록 전체를 한 번에 정렬해서 삽입
+        for r in sorted(spread_rows, key=lambda r: r['sort_key']):
+            self._insert_row(self.table, r['label'], r['s_yday'], r['s_tday'],
+                             stale=r['stale'], note=r['note'], closed_on=r['closed_on'])
+
+    def _build_near_spread_rows(self, name, data_dict):
         """
-        당월(m) 기준 익월물 3개(m+1, m+2, m+3)로 아래 스프레드를 표시한다.
+        당월(m) 기준 익월물 3개(m+1, m+2, m+3)로 아래 스프레드를 계산해 행 목록으로 반환한다.
             m+1/m+2, m+2/m+3, m+1/m+3
 
         relativedelta가 월 덧셈 시 연도를 함께 넘겨주므로 12월을 넘어가면
@@ -224,6 +266,7 @@ class Page2(QWidget):
             yy, mm = d.year % 100, d.month
             months[i] = {"yy": yy, "mm": mm, "info": data_dict.get((yy, mm))}
 
+        rows = []
         pairs = [(1, 2), (2, 3), (1, 3)]  # m+1/m+2, m+2/m+3, m+1/m+3
         for i1, i2 in pairs:
             a, b = months[i1], months[i2]
@@ -231,11 +274,18 @@ class Page2(QWidget):
                 continue
             s_yday = a["info"]["yday"] - b["info"]["yday"]
             s_tday = a["info"]["tday"] - b["info"]["tday"]
-            label = f"{name} {a['mm']:02d}/{b['mm']:02d}"
-            self._insert_row(self.table, label, s_yday, s_tday,
-                             stale=a["info"].get('stale') or b["info"].get('stale'),
-                             note=self._stale_note(a["info"], b["info"]),
-                             closed_on=self._stale_date(a["info"], b["info"]))
+            label = f"{name} {self._month_year_label(a['mm'], a['yy'])}/{self._month_year_label(b['mm'], b['yy'])}"
+            rows.append({
+                'sort_key': (a['yy'], a['mm']),
+                'label': label, 's_yday': s_yday, 's_tday': s_tday,
+                'stale': a["info"].get('stale') or b["info"].get('stale'),
+                'note': self._stale_note(a["info"], b["info"]),
+                'closed_on': self._stale_date(a["info"], b["info"]),
+            })
+        return rows
+
+    def _month_year_label(self, mm, yy):
+        return f"{self._month_name(mm)}{yy:02d}"
 
     def _insert_row(self, table, label, yday, tday, stale=False, note="", closed_on=""):
         """
@@ -330,9 +380,15 @@ class Page2(QWidget):
             QMessageBox.warning(self, "알림", "선택한 월물의 데이터가 없습니다.")
             return
 
-        label = f"{product} {self.compare_month1_cb.currentText()}/{self.compare_month2_cb.currentText()}"
-        s_yday = v1['yday'] - v2['yday']
-        s_tday = v1['tday'] - v2['tday']
+        # 근월물이 항상 앞에 오도록 (연도, 월) 기준으로 정렬
+        if key1 <= key2:
+            near_v, near_text, far_v, far_text = v1, self.compare_month1_cb.currentText(), v2, self.compare_month2_cb.currentText()
+        else:
+            near_v, near_text, far_v, far_text = v2, self.compare_month2_cb.currentText(), v1, self.compare_month1_cb.currentText()
+
+        label = f"{product} {near_text}/{far_text}"
+        s_yday = near_v['yday'] - far_v['yday']
+        s_tday = near_v['tday'] - far_v['tday']
         self.compare_table.setRowCount(0)
         self._insert_row(self.compare_table, label, s_yday, s_tday,
                          stale=v1.get('stale') or v2.get('stale'),
