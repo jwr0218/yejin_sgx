@@ -1,7 +1,6 @@
 import datetime
 import csv
 import os
-import re
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QEvent
@@ -57,7 +56,7 @@ class Page1(QWidget):
 
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
 
-        self.legend = QLabel("회색 숫자 = 거래 종료(만기 등)된 월물. 괄호 안 (MM-DD)가 마지막으로 거래된 날이며, 표시된 값은 그날의 최종 가격입니다. 예) Brent는 인도월 2개월 전에 만기되어 최근월물이 이미 종료된 상태일 수 있습니다.")
+        self.legend = QLabel("회색 숫자 = 거래 종료(만기 등)된 월물. 표시된 값은 마지막으로 거래된 날의 최종 가격이며, 마우스를 올리면 그 날짜를 확인할 수 있습니다. 예) Brent는 인도월 2개월 전에 만기되어 최근월물이 이미 종료된 상태일 수 있습니다.")
         self.legend.setStyleSheet("color: #757575; font-size: 11px;")
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
@@ -149,7 +148,7 @@ class Page1(QWidget):
 
     def _apply_quote_state(self, row, col, info):
         """
-        거래 정지(만기 등) 월물의 셀을 회색 + 툴팁으로 구분 표시한다.
+        거래 정지(만기 등) 월물의 셀을 회색 글자로만 구분 표시한다(날짜는 툴팁으로).
         재로딩 시 살아난 월물의 표시가 남지 않도록 정상 상태도 명시적으로 되돌린다.
         """
         item = self.table.item(row, col)
@@ -158,10 +157,6 @@ class Page1(QWidget):
         if info.get('stale'):
             date = info.get('date') or ""
             item.setForeground(QColor("#9E9E9E"))
-            # 마감일을 셀에 직접 노출한다(툴팁은 올려봐야 보이므로).
-            # 연도를 뺀 MM-DD만 붙여 열 폭을 넘기지 않게 한다.
-            if date:
-                item.setText(f"{item.text()} ({date[5:]})")
             item.setToolTip(f"거래 종료(만기 등)로 실시간 시세가 아님\n마지막 시세 일자: {date}")
         else:
             item.setForeground(QColor("black"))
@@ -193,18 +188,12 @@ class Page1(QWidget):
         for row in range(self.table.rowCount()):
             self.set_val(row, 12, self.get_val(row, 6) - self.get_val(row+1, 6))
 
-    # 거래 종료 월물은 셀에 "84.75 (08-01)"처럼 마감일이 함께 표시되므로,
-    # 앞쪽 숫자만 뽑아 계산에 쓴다. (PX/PTA Futures 열은 수식에 실제로 사용됨)
-    _NUM_RE = re.compile(r'-?[\d,]+(?:\.\d+)?')
-
     def get_val(self, row, col):
         if row < 0 or row >= self.table.rowCount(): return 0.0
         item = self.table.item(row, col)
         if not item or not item.text() or item.text() == "N/A": return 0.0
-        match = self._NUM_RE.search(item.text())
-        if not match: return 0.0
         try:
-            return float(match.group().replace(',', ''))
+            return float(item.text().replace(',', ''))
         except ValueError:
             return 0.0
 

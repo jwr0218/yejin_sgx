@@ -26,7 +26,7 @@ class Page2(QWidget):
 
         layout.addWidget(self.table, 3)
 
-        self.legend = QLabel("⚠ 회색 행 = 거래 종료(만기 등) 월물. 라벨 옆 (MM-DD)가 마지막으로 거래된 날이며, 표시된 값은 그날의 최종 가격입니다.")
+        self.legend = QLabel("회색 행 = 거래 종료(만기 등) 월물. 표시된 값은 마지막으로 거래된 날의 최종 가격이며, 마우스를 올리면 그 날짜를 확인할 수 있습니다.")
         self.legend.setStyleSheet("color: #757575; font-size: 11px;")
         self.legend.setWordWrap(True)
         layout.addWidget(self.legend)
@@ -180,22 +180,19 @@ class Page2(QWidget):
                 # 라벨 형식을 YY-MONTH (예: PTA 26-JAN) 로 변경
                 label = f"{name} {yy}-{self._month_name(mm)}"
                 self._insert_row(self.table, label, info['yday'], info['tday'],
-                                 stale=info.get('stale'), note=self._stale_note(info),
-                                 closed_on=self._stale_date(info))
+                                 stale=info.get('stale'), note=self._stale_note(info))
 
         # 2. 스프레드 항목 추가 (데이터가 존재하는 경우에만)
-        # 라벨은 MonthYear/MonthYear 형식(예: JAN27/MAR27)으로 표시.
+        # 라벨은 연도-월 숫자(예: 26-1/26-3)로 표시한다. 1/9는 9/1(항상 연도가 바뀌는
+        # 전용 스프레드)과 내용이 겹칠 수 있어 별도로 두지 않고 9/1 하나로 통일한다.
         # 1월은 시점에 따라 다음 해로 넘어가 있을 수 있어 m1/m2 숫자 순서만으로는
         # 근월물이 항상 앞에 온다고 보장할 수 없으므로, 실제 연도까지 비교해 정렬한다.
         spread_targets = [
             {"m1": 1, "m2": 3},
-            {"m1": 1, "m2": 9},
             {"m1": 3, "m2": 5},
             {"m1": 1, "m2": 5},
             {"m1": 5, "m2": 9},
         ]
-
-        month_year_label = self._month_year_label
 
         # 각 스프레드를 근월 다리의 (연도,월) 기준 정렬 키와 함께 모아뒀다가,
         # 전부 계산한 뒤 근월이 빠른 순서대로 한꺼번에 삽입한다.
@@ -215,14 +212,13 @@ class Page2(QWidget):
                 s_yday = near_v['yday'] - far_v['yday']
                 s_tday = near_v['tday'] - far_v['tday']
 
-                label = f"{month_year_label(near_m, near_v['yy'])}/{month_year_label(far_m, far_v['yy'])}"
-                # 스프레드 이름 (예: PTA JAN27/MAR27) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
+                label = f"{near_v['yy']}-{near_m}/{far_v['yy']}-{far_m}"
+                # 스프레드 이름 (예: PTA 26-1/26-3) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
                 spread_rows.append({
                     'sort_key': (near_v['yy'], near_m),
                     'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
                     'stale': near_v.get('stale') or far_v.get('stale'),
                     'note': self._stale_note(near_v, far_v),
-                    'closed_on': self._stale_date(near_v, far_v),
                 })
 
         # 9/1 스프레드: "다음 해로 넘어가는 9월→1월" 스프레드는 항상 연도가 바뀌도록 고정
@@ -234,13 +230,11 @@ class Page2(QWidget):
             if jan_info is not None:
                 s_yday = sep_info['yday'] - jan_info['yday']
                 s_tday = sep_info['tday'] - jan_info['tday']
-                label = f"{month_year_label(9, sep_info['yy'])}/{month_year_label(1, jan_yy)}"
                 spread_rows.append({
                     'sort_key': (sep_info['yy'], 9),
-                    'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
+                    'label': f"{name} {sep_info['yy']}-9/{jan_yy}-1", 's_yday': s_yday, 's_tday': s_tday,
                     'stale': sep_info.get('stale') or jan_info.get('stale'),
                     'note': self._stale_note(sep_info, jan_info),
-                    'closed_on': self._stale_date(sep_info, jan_info),
                 })
 
         # 3. 근월 변동폭: m+1/m+2, m+2/m+3, m+1/m+3 (고정 스프레드와 한데 모아서 같이 정렬)
@@ -249,7 +243,7 @@ class Page2(QWidget):
         # 근월(연도,월)이 빠른 것부터 위에 오도록 전체를 한 번에 정렬해서 삽입
         for r in sorted(spread_rows, key=lambda r: r['sort_key']):
             self._insert_row(self.table, r['label'], r['s_yday'], r['s_tday'],
-                             stale=r['stale'], note=r['note'], closed_on=r['closed_on'])
+                             stale=r['stale'], note=r['note'])
 
     def _build_near_spread_rows(self, name, data_dict):
         """
@@ -274,30 +268,23 @@ class Page2(QWidget):
                 continue
             s_yday = a["info"]["yday"] - b["info"]["yday"]
             s_tday = a["info"]["tday"] - b["info"]["tday"]
-            label = f"{name} {self._month_year_label(a['mm'], a['yy'])}/{self._month_year_label(b['mm'], b['yy'])}"
+            label = f"{name} {a['yy']}-{a['mm']}/{b['yy']}-{b['mm']}"
             rows.append({
                 'sort_key': (a['yy'], a['mm']),
                 'label': label, 's_yday': s_yday, 's_tday': s_tday,
                 'stale': a["info"].get('stale') or b["info"].get('stale'),
                 'note': self._stale_note(a["info"], b["info"]),
-                'closed_on': self._stale_date(a["info"], b["info"]),
             })
         return rows
 
-    def _month_year_label(self, mm, yy):
-        return f"{self._month_name(mm)}{yy:02d}"
-
-    def _insert_row(self, table, label, yday, tday, stale=False, note="", closed_on=""):
+    def _insert_row(self, table, label, yday, tday, stale=False, note=""):
         """
         stale=True는 만기 등으로 거래가 멈춘 월물(마지막 체결가가 그대로 남아 있는 상태).
-        값은 그대로 보여주되 회색 처리 + ⚠ + 마감일 표시로 실시간 시세와 구분한다.
+        값은 그대로 보여주되 회색 배경으로만 실시간 시세와 구분한다 (라벨 텍스트는 그대로).
         """
         row = table.rowCount()
         table.insertRow(row)
 
-        # Item 이름 (거래 종료면 마감일을 MM-DD로 함께 노출)
-        if stale:
-            label = f"⚠ {label}" + (f" ({closed_on[5:]})" if closed_on else "")
         item_label = QTableWidgetItem(label)
         item_label.setBackground(QColor("#E0E0E0") if stale else QColor("#D9EAD3"))
         table.setItem(row, 0, item_label)
@@ -332,11 +319,6 @@ class Page2(QWidget):
     def _stale_dates(self, *infos):
         """거래가 멈춘 월물들의 마지막 시세 일자 목록 (오래된 순)."""
         return sorted({i['date'] for i in infos if i.get('stale') and i.get('date')})
-
-    def _stale_date(self, *infos):
-        """라벨에 붙일 마감일. 스프레드는 다리 중 더 오래 멈춘 쪽을 대표로 쓴다."""
-        dates = self._stale_dates(*infos)
-        return dates[0] if dates else ""
 
     def _stale_note(self, *infos):
         """거래가 멈춘 월물의 마지막 시세 일자를 툴팁 문구로 만든다."""
@@ -392,5 +374,4 @@ class Page2(QWidget):
         self.compare_table.setRowCount(0)
         self._insert_row(self.compare_table, label, s_yday, s_tday,
                          stale=v1.get('stale') or v2.get('stale'),
-                         note=self._stale_note(v1, v2),
-                         closed_on=self._stale_date(v1, v2))
+                         note=self._stale_note(v1, v2))
