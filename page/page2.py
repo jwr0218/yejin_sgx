@@ -183,8 +183,8 @@ class Page2(QWidget):
                                  stale=info.get('stale'), note=self._stale_note(info))
 
         # 2. 스프레드 항목 추가 (데이터가 존재하는 경우에만)
-        # 라벨은 연도-월 숫자(예: 26-1/26-3)로 표시한다. 1/9는 9/1(항상 연도가 바뀌는
-        # 전용 스프레드)과 내용이 겹칠 수 있어 별도로 두지 않고 9/1 하나로 통일한다.
+        # 라벨은 숫자(예: 1/3)로 표시한다. 1/9는 9/1(항상 연도가 바뀌는 전용 스프레드)과
+        # 내용이 겹칠 수 있어 별도로 두지 않고 9/1 하나로 통일한다.
         # 1월은 시점에 따라 다음 해로 넘어가 있을 수 있어 m1/m2 숫자 순서만으로는
         # 근월물이 항상 앞에 온다고 보장할 수 없으므로, 실제 연도까지 비교해 정렬한다.
         spread_targets = [
@@ -212,8 +212,8 @@ class Page2(QWidget):
                 s_yday = near_v['yday'] - far_v['yday']
                 s_tday = near_v['tday'] - far_v['tday']
 
-                label = f"{near_v['yy']}-{near_m}/{far_v['yy']}-{far_m}"
-                # 스프레드 이름 (예: PTA 26-1/26-3) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
+                label = f"{near_m}/{far_m}"
+                # 스프레드 이름 (예: PTA 1/3) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
                 spread_rows.append({
                     'sort_key': (near_v['yy'], near_m),
                     'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
@@ -232,7 +232,7 @@ class Page2(QWidget):
                 s_tday = sep_info['tday'] - jan_info['tday']
                 spread_rows.append({
                     'sort_key': (sep_info['yy'], 9),
-                    'label': f"{name} {sep_info['yy']}-9/{jan_yy}-1", 's_yday': s_yday, 's_tday': s_tday,
+                    'label': f"{name} 9/1", 's_yday': s_yday, 's_tday': s_tday,
                     'stale': sep_info.get('stale') or jan_info.get('stale'),
                     'note': self._stale_note(sep_info, jan_info),
                 })
@@ -268,7 +268,7 @@ class Page2(QWidget):
                 continue
             s_yday = a["info"]["yday"] - b["info"]["yday"]
             s_tday = a["info"]["tday"] - b["info"]["tday"]
-            label = f"{name} {a['yy']}-{a['mm']}/{b['yy']}-{b['mm']}"
+            label = f"{name} {a['mm']}/{b['mm']}"
             rows.append({
                 'sort_key': (a['yy'], a['mm']),
                 'label': label, 's_yday': s_yday, 's_tday': s_tday,
