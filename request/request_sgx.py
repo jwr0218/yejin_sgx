@@ -3,6 +3,9 @@ import json
 import time
 
 
+# sina 쪽(request_other.MONTHS_AHEAD)과 조회 구간을 맞춘다.
+MONTHS_AHEAD = 13
+
 _SGX_API = 'https://api.sgx.com/derivatives/v1.0/contract-code/UC?order=asc&orderby=delivery-month&category=futures&session=-1&t={t}'
 _HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
@@ -23,7 +26,7 @@ def get_year_sgx():
             data = json.loads(resp.read())
     except Exception as e:
         print(f"SGX API 요청 실패: {e}")
-        return [{"month": "N/A", "price": "N/A"} for _ in range(12)]
+        return [{"month": "N/A", "price": "N/A"} for _ in range(MONTHS_AHEAD)]
 
     results = []
     for item in data.get('data', []):
@@ -44,11 +47,11 @@ def get_year_sgx():
         print(f"  month={month}, price={price}")
         results.append({"month": month, "price": price})
 
-        if len(results) >= 12:
+        if len(results) >= MONTHS_AHEAD:
             break
 
-    # 12개 미만이면 N/A로 채움
-    while len(results) < 12:
+    # MONTHS_AHEAD 미만이면 N/A로 채움
+    while len(results) < MONTHS_AHEAD:
         results.append({"month": "N/A", "price": "N/A"})
 
     return results

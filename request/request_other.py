@@ -8,6 +8,10 @@ from dateutil.relativedelta import relativedelta
 _KLINE_URL = "https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_x=/InnerFuturesNewService.getDailyKLine?symbol={symbol}"
 _HEADERS = {"Referer": "http://finance.sina.com.cn", "User-Agent": "Mozilla/5.0"}
 
+# 조회할 월물 개수(당월 포함). 거래소가 12개월 연속 월물을 상장하므로 당월부터
+# 12개만 세면 이미 상장된 마지막 월물이 잘린다. 한 달 여유를 둔다.
+MONTHS_AHEAD = 13
+
 # 실시간 시세 응답에서 '시세 일자'가 놓인 인덱스는 심볼 종류마다 다르다.
 #   nf_ (정저우/다롄 등 내수 선물) : 필드 44개, 17번이 일자
 #   hf_ (브렌트유 등 외방 선물)    : 필드 15개, 12번이 일자
@@ -48,7 +52,7 @@ def _fetch_prev_close(session, yy, mm, symbol):
         return (yy, mm), None
 
 
-def get_year_prev_close(product_code, months=12):
+def get_year_prev_close(product_code, months=MONTHS_AHEAD):
     """
     product_code: 'TA'(PTA), 'PX' 등 (내수 선물 심볼, 'nf_' 접두어 제외)
 
@@ -57,7 +61,7 @@ def get_year_prev_close(product_code, months=12):
     월물별로 '오늘 이전 마지막 거래일'의 종가만 정확히 가져온다.
     (오늘의 실시간 거래가는 get_year_prices로 별도 조회)
 
-    월물별로 요청이 각각 필요해 12개월치를 순차 호출하면 느리므로,
+    월물별로 요청이 각각 필요해 순차 호출하면 느리므로,
     스레드풀로 동시에 요청해 응답 시간을 단축한다.
     """
     current_date = datetime.now()
@@ -99,8 +103,8 @@ def get_year_prices(base_symbol_prefix, price_index):
     months_info = []
     symbols = []
 
-    # 1. 지금부터 12개월간의 심볼 생성
-    for i in range(12):
+    # 1. 지금부터 MONTHS_AHEAD 개월간의 심볼 생성
+    for i in range(MONTHS_AHEAD):
         target_date = current_date + relativedelta(months=i)
         yy = target_date.strftime("%y") # '26'
         mm = target_date.strftime("%m") # '05'
