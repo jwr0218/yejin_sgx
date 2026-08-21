@@ -17,7 +17,11 @@ class MainApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Market Analysis Tool")
-        self.resize(1250, 800)
+
+        # Page1이 16개 열을 stretch로 나눠 쓰므로 폭이 좁으면 헤더가 잘린다.
+        # 기본은 넉넉히 잡되, 화면이 더 작으면 화면 크기에 맞춘다.
+        available = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1500, available.width()), min(900, available.height()))
 
         # 중앙 위젯과 메인 레이아웃
         main_widget = QWidget()
