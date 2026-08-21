@@ -28,6 +28,8 @@ class Page1(QWidget):
 
         # 직접 입력받는 physical / phy spread 의 '수동 입력 구간' (0-based, 1~3행)
         self.MANUAL_PHY_ROWS = 3
+        # 4행부터는 두 행 위의 PX / PX SPREAD 를 가져온다 (4행<-2행 ... 11행<-9행)
+        self.PHY_SOURCE_OFFSET = 2
         
         self.table = QTableWidget(11, len(self.headers))   # 당월 제외, 다음 달부터 11개월
         self.table.setHorizontalHeaderLabels(self.headers)
@@ -190,10 +192,13 @@ class Page1(QWidget):
             self.set_val(row, 10, px_future - (px * self.CONST_ZCE_SGX * usd_cnh))
 
             # physical(13) / phy spread(14): 앞 3개 행은 직접 입력받고,
-            # 4행부터는 각각 PX(4) / PX SPREAD(5) 를 그대로 따라간다.
+            # 4행부터는 각각 PX(4) / PX SPREAD(5) 를 두 행 위에서 가져온다.
+            # (4행<-2행, 5행<-3행 ... 11행<-9행)
+            # 가져오는 행은 항상 현재 행보다 위라 이 시점에 이미 계산이 끝나 있다.
             if row >= self.MANUAL_PHY_ROWS:
-                self.set_val(row, 13, px)
-                self.set_val(row, 14, self.get_val(row, 5))
+                src = row - self.PHY_SOURCE_OFFSET
+                self.set_val(row, 13, self.get_val(src, 4))
+                self.set_val(row, 14, self.get_val(src, 5))
 
             # phy-ppr gap(15): 같은 행의 physical - PX
             self.set_val(row, 15, self.get_val(row, 13) - px)
