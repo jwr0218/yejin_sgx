@@ -182,136 +182,134 @@ class Page2(QWidget):
                 self._insert_row(self.table, label, info['yday'], info['tday'],
                                  stale=info.get('stale'), note=self._stale_note(info))
 
-        # 2. 스프레드 항목 추가 (데이터가 존재하는 경우에만)
+        # 2. 스프레드 항목 추가
         # 라벨은 숫자(예: 1/3)로 표시한다. 1/9는 9/1(항상 연도가 바뀌는 전용 스프레드)과
         # 내용이 겹칠 수 있어 별도로 두지 않고 9/1 하나로 통일한다.
-        # 1월은 시점에 따라 다음 해로 넘어가 있을 수 있어 m1/m2 숫자 순서만으로는
-        # 근월물이 항상 앞에 온다고 보장할 수 없으므로, 실제 연도까지 비교해 정렬한다.
-        spread_targets = [
-            {"m1": 1, "m2": 3},
-            {"m1": 3, "m2": 5},
-            {"m1": 1, "m2": 5},
-            {"m1": 5, "m2": 9},
-        ]
-
-        # 각 스프레드를 근월 다리의 (연도,월) 기준 정렬 키와 함께 모아뒀다가,
-        # 전부 계산한 뒤 근월이 빠른 순서대로 한꺼번에 삽입한다.
+        #
+        # 다리를 (연도, 월) 키로 확정한 뒤 시세를 붙인다. 월 숫자만으로는 근월물이
+        # 항상 앞에 온다고 보장할 수 없기 때문이다(1월은 시점에 따라 다음 해).
+        # 시세가 없어 계산할 수 없는 조합도 행은 남기고 N/A로 표시한다 - 항상
+        # 지켜보는 스프레드가 조용히 사라지면 빠진 줄 모르기 때문이다.
         spread_rows = []
+        seen = set()
 
-        for s in spread_targets:
-            m1, m2 = s["m1"], s["m2"]
-            if m1 in active_info and m2 in active_info:
-                v1, v2 = active_info[m1], active_info[m2]
+        def add_spread(near_key, far_key):
+            """near_key/far_key = (yy, mm). 같은 조합이 두 번 들어오면 무시한다."""
+            if near_key == far_key or (near_key, far_key) in seen:
+                return
+            seen.add((near_key, far_key))
 
-                # 근월물이 항상 앞에 오도록 (연도, 월) 기준으로 비교해 정렬
-                if (v1['yy'], m1) <= (v2['yy'], m2):
-                    near_m, near_v, far_m, far_v = m1, v1, m2, v2
-                else:
-                    near_m, near_v, far_m, far_v = m2, v2, m1, v1
+            near_v, far_v = data_dict.get(near_key), data_dict.get(far_key)
+            row = {
+                'sort_key': near_key,
+                'label': f"{name} {near_key[1]}/{far_key[1]}",
+                's_yday': None, 's_tday': None, 'stale': False, 'note': '',
+            }
+            if near_v is None or far_v is None:
+                missing = [k for k, v in ((near_key, near_v), (far_key, far_v)) if v is None]
+                row['note'] = ("시세가 없어 계산할 수 없음\n해당 월물: "
+                               + ", ".join(f"{yy:02d}-{self._month_name(mm)}" for yy, mm in missing))
+            else:
+                row['s_yday'] = near_v['yday'] - far_v['yday']
+                row['s_tday'] = near_v['tday'] - far_v['tday']
+                # 한 다리라도 거래 정지면 스프레드도 신뢰 불가
+                row['stale'] = near_v.get('stale') or far_v.get('stale')
+                row['note'] = self._stale_note(near_v, far_v)
+            spread_rows.append(row)
 
-                s_yday = near_v['yday'] - far_v['yday']
-                s_tday = near_v['tday'] - far_v['tday']
+        # 타겟 월물의 연도표. 시세 유무와 무관하게 잡아둬야 N/A 행도 만들 수 있다.
+        target_yy = {t['month']: t['year'] % 100 for t in target_list}
 
-                label = f"{near_m}/{far_m}"
-                # 스프레드 이름 (예: PTA 1/3) - 한 다리라도 거래 정지면 스프레드도 신뢰 불가
-                spread_rows.append({
-                    'sort_key': (near_v['yy'], near_m),
-                    'label': f"{name} {label}", 's_yday': s_yday, 's_tday': s_tday,
-                    'stale': near_v.get('stale') or far_v.get('stale'),
-                    'note': self._stale_note(near_v, far_v),
-                })
+        def key_of(mm):
+            return (target_yy[mm], mm) if mm in target_yy else None
 
-        # 9/1 스프레드: "다음 해로 넘어가는 9월→1월" 스프레드는 항상 연도가 바뀌도록 고정
-        # (active_info의 1월은 현재 시점에 따라 9월보다 앞선 해일 수도 있어 그대로 쓰면 안 됨)
-        if 9 in active_info:
-            sep_info = active_info[9]
-            jan_yy = (sep_info['yy'] + 1) % 100
-            jan_info = data_dict.get((jan_yy, 1))
-            if jan_info is not None:
-                s_yday = sep_info['yday'] - jan_info['yday']
-                s_tday = sep_info['tday'] - jan_info['tday']
-                spread_rows.append({
-                    'sort_key': (sep_info['yy'], 9),
-                    'label': f"{name} 9/1", 's_yday': s_yday, 's_tday': s_tday,
-                    'stale': sep_info.get('stale') or jan_info.get('stale'),
-                    'note': self._stale_note(sep_info, jan_info),
-                })
+        # 주력월 스프레드 (근월이 앞에 오도록 연도까지 비교)
+        for m1, m2 in ((1, 3), (3, 5), (1, 5), (5, 9)):
+            k1, k2 = key_of(m1), key_of(m2)
+            if k1 and k2:
+                add_spread(*sorted((k1, k2)))
+
+        # 9/1: 9월 -> 다음 해 1월. 항상 해를 넘기도록 고정한다.
+        # (target_yy의 1월은 시점에 따라 9월보다 앞선 해일 수 있어 그대로 쓰면 안 됨)
+        sep_key = key_of(9)
+        if sep_key:
+            add_spread(sep_key, ((sep_key[0] + 1) % 100, 1))
+
+        # 5/9: 같은 해 5월 -> 9월. 위 주력월 스프레드의 5/9는 시점에 따라
+        # '올해 9월 - 내년 5월'로 잡히므로, 해를 넘기지 않는 5/9를 따로 둔다.
+        may_key = key_of(5)
+        if may_key:
+            add_spread(may_key, (may_key[0], 9))
 
         # 3. 근월 변동폭: m+1/m+2, m+2/m+3, m+1/m+3 (고정 스프레드와 한데 모아서 같이 정렬)
-        spread_rows.extend(self._build_near_spread_rows(name, data_dict))
+        for near_key, far_key in self._near_spread_pairs():
+            add_spread(near_key, far_key)
 
         # 근월(연도,월)이 빠른 것부터 위에 오도록 전체를 한 번에 정렬해서 삽입
         for r in sorted(spread_rows, key=lambda r: r['sort_key']):
             self._insert_row(self.table, r['label'], r['s_yday'], r['s_tday'],
                              stale=r['stale'], note=r['note'])
 
-    def _build_near_spread_rows(self, name, data_dict):
+    def _near_spread_pairs(self):
         """
-        당월(m) 기준 익월물 3개(m+1, m+2, m+3)로 아래 스프레드를 계산해 행 목록으로 반환한다.
+        당월(m) 기준 익월물 3개(m+1, m+2, m+3)로 만드는 스프레드 다리 목록.
             m+1/m+2, m+2/m+3, m+1/m+3
 
         relativedelta가 월 덧셈 시 연도를 함께 넘겨주므로 12월을 넘어가면
         자동으로 다음 해 1월이 된다. (예: 11월 -> m+2는 다음 해 1월)
+        m+1 < m+2 < m+3 이므로 앞쪽이 항상 근월이다.
         """
         now = datetime.datetime.now()
         months = {}
         for i in (1, 2, 3):
             d = now + relativedelta(months=i)
-            yy, mm = d.year % 100, d.month
-            months[i] = {"yy": yy, "mm": mm, "info": data_dict.get((yy, mm))}
-
-        rows = []
-        pairs = [(1, 2), (2, 3), (1, 3)]  # m+1/m+2, m+2/m+3, m+1/m+3
-        for i1, i2 in pairs:
-            a, b = months[i1], months[i2]
-            if a["info"] is None or b["info"] is None:
-                continue
-            s_yday = a["info"]["yday"] - b["info"]["yday"]
-            s_tday = a["info"]["tday"] - b["info"]["tday"]
-            label = f"{name} {a['mm']}/{b['mm']}"
-            rows.append({
-                'sort_key': (a['yy'], a['mm']),
-                'label': label, 's_yday': s_yday, 's_tday': s_tday,
-                'stale': a["info"].get('stale') or b["info"].get('stale'),
-                'note': self._stale_note(a["info"], b["info"]),
-            })
-        return rows
+            months[i] = (d.year % 100, d.month)
+        return [(months[a], months[b]) for a, b in ((1, 2), (2, 3), (1, 3))]
 
     def _insert_row(self, table, label, yday, tday, stale=False, note=""):
         """
         stale=True는 만기 등으로 거래가 멈춘 월물(마지막 체결가가 그대로 남아 있는 상태).
         값은 그대로 보여주되 회색 배경으로만 실시간 시세와 구분한다 (라벨 텍스트는 그대로).
+
+        yday/tday가 None이면 시세가 없어 계산할 수 없는 경우로, 행은 남기고
+        N/A로 표시한다. 사유는 note(툴팁)로 알린다.
         """
         row = table.rowCount()
         table.insertRow(row)
+        missing = yday is None or tday is None
 
         item_label = QTableWidgetItem(label)
         item_label.setBackground(QColor("#E0E0E0") if stale else QColor("#D9EAD3"))
         table.setItem(row, 0, item_label)
 
         # yday, tday
-        table.setItem(row, 1, QTableWidgetItem(f"{yday:,.2f}"))
-        table.setItem(row, 2, QTableWidgetItem(f"{tday:,.2f}"))
+        table.setItem(row, 1, QTableWidgetItem("N/A" if yday is None else f"{yday:,.2f}"))
+        table.setItem(row, 2, QTableWidgetItem("N/A" if tday is None else f"{tday:,.2f}"))
 
-        # +/-
-        diff = tday - yday
-        diff_item = QTableWidgetItem(f"{diff:+.2f}")
-        if diff > 0: diff_item.setForeground(QColor("red"))
-        elif diff < 0: diff_item.setForeground(QColor("blue"))
-        table.setItem(row, 3, diff_item)
+        if missing:
+            # 한쪽이라도 없으면 변동폭 자체가 성립하지 않는다.
+            table.setItem(row, 3, QTableWidgetItem("N/A"))
+            table.setItem(row, 4, QTableWidgetItem("N/A"))
+        else:
+            # +/-
+            diff = tday - yday
+            diff_item = QTableWidgetItem(f"{diff:+.2f}")
+            if diff > 0: diff_item.setForeground(QColor("red"))
+            elif diff < 0: diff_item.setForeground(QColor("blue"))
+            table.setItem(row, 3, diff_item)
 
-        # usd+/-
-        usd_diff = diff / 7.2
-        usd_item = QTableWidgetItem(f"{usd_diff:+.2f}")
-        if usd_diff > 0: usd_item.setForeground(QColor("red"))
-        elif usd_diff < 0: usd_item.setForeground(QColor("blue"))
-        table.setItem(row, 4, usd_item)
+            # usd+/-
+            usd_diff = diff / 7.2
+            usd_item = QTableWidgetItem(f"{usd_diff:+.2f}")
+            if usd_diff > 0: usd_item.setForeground(QColor("red"))
+            elif usd_diff < 0: usd_item.setForeground(QColor("blue"))
+            table.setItem(row, 4, usd_item)
 
         for i in range(5):
             it = table.item(row, i)
             if it:
                 it.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                if stale:
+                if stale or missing:
                     # +/- 의 빨강/파랑보다 뒤에 적용해 회색이 최종적으로 남도록 한다.
                     it.setForeground(QColor("#9E9E9E"))
                     it.setToolTip(note)

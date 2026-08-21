@@ -4,7 +4,7 @@ import time
 
 
 # sina 쪽(request_other.MONTHS_AHEAD)과 조회 구간을 맞춘다.
-MONTHS_AHEAD = 13
+MONTHS_AHEAD = 14
 
 _SGX_API = 'https://api.sgx.com/derivatives/v1.0/contract-code/UC?order=asc&orderby=delivery-month&category=futures&session=-1&t={t}'
 _HEADERS = {
