@@ -22,8 +22,12 @@ class Page1(QWidget):
         self.headers = [
             "Month", "BRENT", "Mopj", "MOPJ SPREAD", "PX", 
             "PX SPREAD", "PXN", "PX Futures", "PTA Futures", 
-            "PX-PTA SPREAD", "ZCEPX-SGXPX", "USD/CNH", "BOX"
+            "PX-PTA SPREAD", "ZCEPX-SGXPX", "USD/CNH", "BOX",
+            "physical", "phy spread", "phy-ppr gap"
         ]
+
+        # 직접 입력받는 physical / phy spread 의 '수동 입력 구간' (0-based, 1~3행)
+        self.MANUAL_PHY_ROWS = 3
         
         self.table = QTableWidget(11, len(self.headers))   # 당월 제외, 다음 달부터 11개월
         self.table.setHorizontalHeaderLabels(self.headers)
@@ -77,7 +81,7 @@ class Page1(QWidget):
 
     def init_table_defaults(self):
         for row in range(self.table.rowCount()):
-            for col in [3, 5]: 
+            for col in [3, 5, 13, 14]:
                 self.set_val(row, col, 0)
 
     def init_month_labels(self):
@@ -165,7 +169,7 @@ class Page1(QWidget):
     def on_item_changed(self, item):
         col = item.column()
         item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)  # 추가
-        if col in [1, 2, 3, 4, 5, 7, 8, 11]:
+        if col in [1, 2, 3, 4, 5, 7, 8, 11, 13, 14]:
             self.calculate_all_logic()
 
     def calculate_all_logic(self):
@@ -184,6 +188,15 @@ class Page1(QWidget):
             self.set_val(row, 6, px - mopj)
             self.set_val(row, 9, pta_future - (self.CONST_PX_PTA * px * usd_cnh))
             self.set_val(row, 10, px_future - (px * self.CONST_ZCE_SGX * usd_cnh))
+
+            # physical(13) / phy spread(14): 앞 3개 행은 직접 입력받고,
+            # 4행부터는 각각 PX(4) / PX SPREAD(5) 를 그대로 따라간다.
+            if row >= self.MANUAL_PHY_ROWS:
+                self.set_val(row, 13, px)
+                self.set_val(row, 14, self.get_val(row, 5))
+
+            # phy-ppr gap(15): 같은 행의 physical - PX
+            self.set_val(row, 15, self.get_val(row, 13) - px)
 
         for row in range(self.table.rowCount()):
             self.set_val(row, 12, self.get_val(row, 6) - self.get_val(row+1, 6))
