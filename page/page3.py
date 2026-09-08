@@ -158,6 +158,20 @@ class Page3(QWidget):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(row, 0, item)
 
+    def format_month_label(self, month_str):
+        """월물 문자열 'YY/MM'을 화면 표기용 'YY-MON'으로 바꾼다.
+
+        조회 구간이 13개월이라 같은 월 이름이 두 번 나온다(예: 26년 9월, 27년 9월).
+        연도를 같이 보여주지 않으면 어느 해 월물인지 구분할 수 없다.
+        """
+        parts = str(month_str).split('/')
+        mm = parts[-1]
+        if not (mm.isdigit() and 1 <= int(mm) <= 12):
+            return "???"
+        name = self.months[int(mm) - 1]
+        yy = parts[0] if len(parts) > 1 and parts[0].isdigit() else ""
+        return f"{yy}-{name}" if yy else name
+
     def parse_value(self, text):
         if not text: return 0.0
         try: return float(text.split('-')[0].replace(',', ''))
@@ -186,22 +200,23 @@ class Page3(QWidget):
             for item in future_data:
                 p = item.get('price', '0')
                 m_n = item.get('month', '').split('/')[-1]
-                m_str = self.months[int(m_n)-1].upper() if m_n.isdigit() else "???"
+                m_str = self.format_month_label(item.get('month', ''))
                 display_txt = f"{p}-{m_str}"
                 # 거래 정지(만기 등) 월물은 마지막 체결가라 실시간 시세와 구분이 필요하다.
                 # 숫자 앞부분은 그대로 두어 parse_value 파싱에는 영향이 없다.
                 if item.get('stale'):
                     display_txt += f" ⚠거래정지({item.get('date')})"
                 calc['future_cb'].addItem(display_txt)
-                if m_n == month_idx: f_target_text = display_txt
+                if m_n == month_idx and not f_target_text: f_target_text = display_txt
 
             for item in usd_data:
                 p = item.get('price', '0')
                 m_n = item.get('month', '').split('/')[-1]
-                m_str = self.months[int(m_n)-1].upper() if m_n.isdigit() else "???"
+                m_str = self.format_month_label(item.get('month', ''))
                 display_txt = f"{p}-{m_str}"
                 calc['usd_cb'].addItem(display_txt)
-                if m_n == month_idx: u_target_text = display_txt
+                # 같은 월이 두 해 들어오므로 먼저 오는(가까운 해) 월물을 기본 선택한다.
+                if m_n == month_idx and not u_target_text: u_target_text = display_txt
 
             if f_target_text: calc['future_cb'].setEditText(f_target_text)
             if u_target_text: calc['usd_cb'].setEditText(u_target_text)
