@@ -1,4 +1,6 @@
 import sys
+import datetime
+from dateutil.relativedelta import relativedelta
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QLabel, QHeaderView, QComboBox, 
                              QPushButton, QLineEdit, QMessageBox)
@@ -7,11 +9,12 @@ from PyQt6.QtGui import QColor
 
 # 기존 사용자 모듈 로드
 try:
-    from request.request_other import get_year_prices
+    from request.request_other import get_year_prices, MONTHS_AHEAD
     from request.request_sgx import get_year_sgx
     from screenshot import take_screenshot
 except ImportError:
     # 테스트용 더미 함수
+    MONTHS_AHEAD = 14
     def get_year_prices(code, count): return []
     def get_year_sgx(): return []
     def take_screenshot(a, b): pass
@@ -74,7 +77,7 @@ class Page3(QWidget):
         # 2. 상단 입력 테이블
         header_table = QTableWidget(1, 4)
         f_label = "PTA future" if mode == "PX-PTA" else "PX future"
-        headers = ["month", "spread", f_label, "usd/chn"]
+        headers = ["year-month", "spread", f_label, "usd/chn"]
         
         header_table.setHorizontalHeaderLabels(headers)
         header_table.setFixedHeight(65)
@@ -83,7 +86,8 @@ class Page3(QWidget):
         header_table.setStyleSheet("QHeaderView::section { background-color: #FDE9D9; font-weight: bold; border: 1px solid #D9D9D9; }")
 
         month_combo = QComboBox()
-        month_combo.addItems(self.months)
+        for label, key in self.month_options():
+            month_combo.addItem(label, key)   # 표시는 '26-SEP', 값은 (26, 9)
         header_table.setCellWidget(0, 0, month_combo)
 
         spread_edit = QLineEdit()
@@ -113,7 +117,7 @@ class Page3(QWidget):
         # 4. 결과 테이블
         target_col_name1 = "PX" 
         target_col_name2 = "PTA Future" if mode == "PX-PTA" else "PX Future"
-        res_headers = ["month", target_col_name1, "spread", target_col_name2, "usd/chn"]
+        res_headers = ["year-month", target_col_name1, "spread", target_col_name2, "usd/chn"]
         result_table = QTableWidget(9, 5)
         result_table.setHorizontalHeaderLabels(res_headers)
         result_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -158,6 +162,21 @@ class Page3(QWidget):
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             table.setItem(row, 0, item)
 
+    def month_options(self):
+        """month 선택창에 넣을 (라벨, (yy, mm)) 목록.
+
+        시세를 당월부터 MONTHS_AHEAD 개월치로 가져오므로 선택창도 같은 기준,
+        같은 순서로 맞춘다. JAN~DEC 고정 목록은 지금이 몇 년인지 담지 못해
+        26년 9월과 27년 9월을 구분할 수 없었고, 순서도 데이터와 어긋났다.
+        """
+        now = datetime.datetime.now()
+        options = []
+        for i in range(MONTHS_AHEAD):
+            d = now + relativedelta(months=i)
+            yy, mm = d.year % 100, d.month
+            options.append((f"{yy:02d}-{self.months[mm - 1]}", (yy, mm)))
+        return options
+
     def format_month_label(self, month_str):
         """월물 문자열 'YY/MM'을 화면 표기용 'YY-MON'으로 바꾼다.
 
@@ -180,8 +199,9 @@ class Page3(QWidget):
     def on_fetch_clicked(self, cid):
         calc = self.calculators[cid]
         mode = calc['mode']
-        selected_month = calc['month_cb'].currentText().upper()
-        month_idx = str(self.months.index(selected_month) + 1).zfill(2)
+        # 콤보에 담아 둔 (yy, mm)을 데이터의 'YY/MM' 키로 바꿔 연·월까지 일치시킨다.
+        selected_key = calc['month_cb'].currentData()
+        target_month = "{:02d}/{:02d}".format(*selected_key) if selected_key else ""
         
         try:
             if mode == "PX-PTA":
@@ -199,7 +219,6 @@ class Page3(QWidget):
 
             for item in future_data:
                 p = item.get('price', '0')
-                m_n = item.get('month', '').split('/')[-1]
                 m_str = self.format_month_label(item.get('month', ''))
                 display_txt = f"{p}-{m_str}"
                 # 거래 정지(만기 등) 월물은 마지막 체결가라 실시간 시세와 구분이 필요하다.
@@ -207,16 +226,14 @@ class Page3(QWidget):
                 if item.get('stale'):
                     display_txt += f" ⚠거래정지({item.get('date')})"
                 calc['future_cb'].addItem(display_txt)
-                if m_n == month_idx and not f_target_text: f_target_text = display_txt
+                if item.get('month') == target_month: f_target_text = display_txt
 
             for item in usd_data:
                 p = item.get('price', '0')
-                m_n = item.get('month', '').split('/')[-1]
                 m_str = self.format_month_label(item.get('month', ''))
                 display_txt = f"{p}-{m_str}"
                 calc['usd_cb'].addItem(display_txt)
-                # 같은 월이 두 해 들어오므로 먼저 오는(가까운 해) 월물을 기본 선택한다.
-                if m_n == month_idx and not u_target_text: u_target_text = display_txt
+                if item.get('month') == target_month: u_target_text = display_txt
 
             if f_target_text: calc['future_cb'].setEditText(f_target_text)
             if u_target_text: calc['usd_cb'].setEditText(u_target_text)
