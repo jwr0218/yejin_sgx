@@ -8,6 +8,7 @@ from dateutil.relativedelta import relativedelta
 
 import config
 from request.request_other import get_year_prices
+from request import request_sgx
 from request.request_sgx import get_year_sgx
 from screenshot import take_screenshot
 
@@ -250,7 +251,9 @@ class Page1(QWidget):
             if sgx_info and sgx_info['price'] != 'N/A':
                 self.set_val(row, 11, float(sgx_info['price']))
                 item = self.table.item(row, 11)
-                if item: item.setForeground(QColor("black"))
+                if item:
+                    item.setForeground(QColor("black"))
+                    item.setToolTip("당일 체결 없음 - SGX 예비 정산가" if sgx_info.get('settle') else "")
             else:
                 self.set_val(row, 11, 0)
 
@@ -280,6 +283,15 @@ class Page1(QWidget):
         self.table.blockSignals(False)
         self.calculate_all_logic()
         print("2-Pass 환율 보정 및 당월 제외 데이터 로드 완료")
+
+        # 환율이 전부 0이면 콘솔을 보지 않는 한 이유를 알 수 없으므로 팝업으로 알려 준다.
+        if all(self.get_val(row, 11) == 0 for row in range(rows)):
+            reason = request_sgx.last_error or (
+                "SGX 응답은 정상이지만 표시 월물과 일치하는 시세가 없습니다. "
+                "PC 날짜/시간 설정을 확인해 주세요.")
+            QMessageBox.warning(self, "USD/CNH 조회 실패",
+                                "USD/CNH 환율이 모두 0입니다. PX-PTA SPREAD, ZCEPX-SGXPX 값도 "
+                                f"정확하지 않습니다.\n\n원인: {reason}")
 
     # def load_all_market_data(self):
         # """API 로드 및 2-Pass 보정 (앞 칸 우선 채우기 -> 남은 빈칸 뒷 칸 채우기)"""

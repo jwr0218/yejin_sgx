@@ -10,6 +10,7 @@ from PyQt6.QtGui import QColor
 # 기존 사용자 모듈 로드
 try:
     from request.request_other import get_year_prices, MONTHS_AHEAD
+    from request import request_sgx
     from request.request_sgx import get_year_sgx
     from screenshot import take_screenshot
 except ImportError:
@@ -17,6 +18,7 @@ except ImportError:
     MONTHS_AHEAD = 14
     def get_year_prices(code, count): return []
     def get_year_sgx(): return []
+    request_sgx = None
     def take_screenshot(a, b): pass
 
 class Page3(QWidget):
@@ -233,7 +235,7 @@ class Page3(QWidget):
                 m_str = self.format_month_label(item.get('month', ''))
                 display_txt = f"{p}-{m_str}"
                 calc['usd_cb'].addItem(display_txt)
-                if item.get('month') == target_month: u_target_text = display_txt
+                if item.get('month') == target_month and p != 'N/A': u_target_text = display_txt
 
             if f_target_text: calc['future_cb'].setEditText(f_target_text)
             if u_target_text: calc['usd_cb'].setEditText(u_target_text)
@@ -244,8 +246,19 @@ class Page3(QWidget):
             
             QTimer.singleShot(600, lambda: self.reset_flash_style(calc))
 
+            # 환율을 못 받으면 콤보에 0(N/A)만 남아 계산이 되지 않으므로 이유를 알려 준다.
+            if all(item.get('price') in (None, 'N/A') for item in usd_data):
+                reason = (request_sgx.last_error if request_sgx else None) or "SGX 응답에 환율 데이터가 없습니다."
+                QMessageBox.warning(self, "USD/CNH 조회 실패",
+                                    f"USD/CNH 환율을 받아오지 못했습니다.\n\n원인: {reason}")
+            elif not u_target_text:
+                QMessageBox.warning(self, "USD/CNH 없음",
+                                    f"선택한 월({calc['month_cb'].currentText()})의 USD/CNH 시세가 SGX에 없습니다.\n"
+                                    "usd/chn 칸에서 다른 월물을 고르거나 값을 직접 입력해 주세요.")
+
         except Exception as e:
             print(f"Fetch Error: {e}")
+            QMessageBox.critical(self, "조회 오류", f"시세를 불러오는 중 오류가 발생했습니다.\n\n{type(e).__name__}: {e}")
 
     def reset_flash_style(self, calc):
         calc['future_cb'].setStyleSheet("")
@@ -262,7 +275,11 @@ class Page3(QWidget):
             f = self.parse_value(calc['future_cb'].currentText())
             u = self.parse_value(calc['usd_cb'].currentText())
 
-            if u == 0: return
+            if u == 0:
+                QMessageBox.warning(self, "USD/CNH 없음",
+                                    "usd/chn 값이 0이라 계산할 수 없습니다.\n"
+                                    "'정보 가져오기'로 환율을 다시 받거나 값을 직접 입력해 주세요.")
+                return
 
             if mode == "PX-PTA":
                 center_val = (f - s) / (const_val * u)
