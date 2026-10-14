@@ -36,7 +36,8 @@ def describe_error(e):
     else:
         reason = getattr(e, 'reason', e)
         if isinstance(reason, ssl.SSLError) or 'CERTIFICATE' in str(e).upper():
-            why = "SSL 인증서 확인에 실패했습니다. 회사 보안 장비/프록시가 HTTPS를 가로채는 환경일 수 있습니다."
+            why = ("SSL 인증서 확인에 실패했습니다. 회사 보안 장비/프록시가 HTTPS를 가로채는 환경일 수 있습니다. "
+                   "'pip install truststore' 설치 후 다시 시도하거나, IT 담당자에게 api.sgx.com 접속 허용을 요청해 주세요.")
         elif isinstance(reason, (socket.timeout, TimeoutError)) or 'timed out' in str(e):
             why = "SGX 서버 응답 시간이 초과되었습니다. 네트워크가 느리거나 방화벽에서 막혀 있을 수 있습니다."
         elif isinstance(reason, socket.gaierror):
@@ -50,18 +51,51 @@ def describe_error(e):
     return f"{why}\n\n(상세: {type(e).__name__}: {e})"
 
 
+def _ssl_contexts():
+    """
+    인증서 검증 방식을 순서대로 돌려준다. 검증 자체를 끄지는 않는다.
+    SGX 인증서는 비교적 새 루트(GlobalSign Root R46)에 묶여 있어서, 이 루트가 아직
+    설치되지 않은 Windows에서는 브라우저는 되는데 Python만 실패하는 일이 생긴다.
+      1. truststore : OS 인증서 검증을 그대로 사용 (Windows 루트 자동 업데이트, 회사 인증서 포함)
+      2. 기본       : Python이 읽어 온 OS 인증서 저장소
+      3. certifi    : requests와 함께 설치되는 Mozilla 루트 인증서 묶음 (R46 포함)
+    """
+    try:
+        import truststore
+        yield "truststore", truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:
+        pass
+    yield "기본", ssl.create_default_context()
+    try:
+        import certifi
+        yield "certifi", ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        pass
+
+
+def _is_cert_error(e):
+    reason = getattr(e, 'reason', e)
+    return isinstance(reason, ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in str(e)
+
+
 def _fetch(retries=2):
     t = int(time.time() * 1000)
     req = urllib.request.Request(_SGX_API.format(t=t), headers=_HEADERS)
     for attempt in range(retries):
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read())
-        except Exception as e:
-            print(f"SGX API 요청 실패 ({attempt + 1}/{retries}): {e}")
-            if attempt + 1 == retries:
-                raise
-            time.sleep(1)
+        error = None
+        for name, ctx in _ssl_contexts():
+            try:
+                with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+                    return json.loads(resp.read())
+            except Exception as e:
+                print(f"SGX API 요청 실패 ({attempt + 1}/{retries}, 인증서 {name}): {e}")
+                error = e
+                # 인증서 문제일 때만 다른 검증 방식으로 다시 시도한다.
+                if not _is_cert_error(e):
+                    break
+        if attempt + 1 == retries:
+            raise error
+        time.sleep(1)
 
 
 def get_year_sgx():

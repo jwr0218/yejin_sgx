@@ -2,3 +2,4 @@ requests
 PyQt6
 pyinstaller
 python-dateutil
+truststore; python_version >= "3.10"
