@@ -74,12 +74,13 @@ def get_year_sgx():
         last_error = describe_error(e)
         return [{"month": "N/A", "price": "N/A"} for _ in range(MONTHS_AHEAD)]
 
-    results = []
+    # 월물마다 T 세션(0)과 T+1 세션(1) 행이 따로 온다 (응답은 delivery-month 오름차순).
+    by_delivery = {}
     for item in data.get('data', []):
-        if item.get('current-trading-session') != '0':
-            continue
+        by_delivery.setdefault(item.get('delivery-month', ''), []).append(item)
 
-        delivery = item.get('delivery-month', '')  # "2026-05"
+    results = []
+    for delivery, rows in by_delivery.items():  # "2026-05"
         # Sina API와 동일한 "YY/MM" 형식으로 변환
         try:
             yy, mm = delivery.split('-')
@@ -87,11 +88,19 @@ def get_year_sgx():
         except Exception:
             month = delivery
 
-        price_val = item.get('last-traded-price-adj')
-        price = 'N/A' if price_val is None else str(price_val)
+        # 지금 거래 중인 가격을 보이도록, 두 세션 중 가장 최근에 체결된 쪽을 쓴다.
+        # (T 세션만 보면 야간 T+1 세션 동안 낮의 마지막 체결가에 머문다)
+        traded = [r for r in rows if r.get('last-traded-price-adj') is not None]
+        latest = max(traded, key=lambda r: r.get('last-update-time') or '', default=None)
+        if latest:
+            price = str(latest['last-traded-price-adj'])
+            # "2026-10-14 14:13:52.0" -> "2026-10-14 14:13:52" (싱가포르 시간)
+            traded_at = (latest.get('last-update-time') or '').split('.')[0]
+        else:
+            price, traded_at = 'N/A', ''
 
-        print(f"  month={month}, price={price}")
-        results.append({"month": month, "price": price})
+        print(f"  month={month}, price={price}, time={traded_at}")
+        results.append({"month": month, "price": price, "time": traded_at})
 
         if len(results) >= MONTHS_AHEAD:
             break

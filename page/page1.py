@@ -251,9 +251,14 @@ class Page1(QWidget):
             if sgx_info and sgx_info['price'] != 'N/A':
                 self.set_val(row, 11, float(sgx_info['price']))
                 item = self.table.item(row, 11)
-                if item: item.setForeground(QColor("black"))
+                if item:
+                    item.setForeground(QColor("black"))
+                    item.setToolTip(f"최종 체결 {sgx_info.get('time')} (싱가포르 시간)\n"
+                                    "SGX 공개 지연 시세로 약 10분 늦게 반영됩니다.")
             else:
                 self.set_val(row, 11, 0)
+                item = self.table.item(row, 11)
+                if item: item.setToolTip("")
 
         # 2. [Pass 1] 순방향 보정: 앞 칸(위)의 값을 아래로 전파 (앞 칸 우선 논리)
         rows = self.table.rowCount()
@@ -266,7 +271,9 @@ class Page1(QWidget):
                     check[row] = True
                     self.set_val(row, 11, prev_v)
                     item = self.table.item(row, 11)
-                    if item: item.setForeground(QColor("blue"))
+                    if item:
+                        item.setForeground(QColor("blue"))
+                        item.setToolTip("체결 없음 - 인접 월물 값으로 채움")
 
         # 3. [Pass 2] 역방향 보정: 여전히 0인 칸은 뒷 칸(아래)의 값을 위로 전파
         for row in range(rows - 2, -1, -1): # 마지막 직전 행부터 0번 행까지 거꾸로
@@ -276,7 +283,9 @@ class Page1(QWidget):
                     check[row] = True
                     self.set_val(row, 11, next_v)
                     item = self.table.item(row, 11)
-                    if item: item.setForeground(QColor("blue"))
+                    if item:
+                        item.setForeground(QColor("blue"))
+                        item.setToolTip("체결 없음 - 인접 월물 값으로 채움")
 
         self.table.blockSignals(False)
         self.calculate_all_logic()
