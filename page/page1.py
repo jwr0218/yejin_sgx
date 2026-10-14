@@ -251,9 +251,7 @@ class Page1(QWidget):
             if sgx_info and sgx_info['price'] != 'N/A':
                 self.set_val(row, 11, float(sgx_info['price']))
                 item = self.table.item(row, 11)
-                if item:
-                    item.setForeground(QColor("black"))
-                    item.setToolTip("당일 체결 없음 - SGX 예비 정산가" if sgx_info.get('settle') else "")
+                if item: item.setForeground(QColor("black"))
             else:
                 self.set_val(row, 11, 0)
 

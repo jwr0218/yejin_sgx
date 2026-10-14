@@ -64,22 +64,6 @@ def _fetch(retries=2):
             time.sleep(1)
 
 
-def _pick_price(rows):
-    """
-    한 월물의 세션별 행들 중에서 쓸 가격을 고른다.
-    T 세션(0) 체결가 -> T+1 세션(1) 체결가 -> 예비 정산가 순.
-    원월물이나 장 시작 직후에는 체결가가 비어 오는 일이 흔하다.
-    """
-    rows = sorted(rows, key=lambda r: r.get('current-trading-session') != '0')
-    for r in rows:
-        if r.get('last-traded-price-adj') is not None:
-            return r['last-traded-price-adj'], False
-    for r in rows:
-        if r.get('preliminary-settlement-price-adj') is not None:
-            return r['preliminary-settlement-price-adj'], True
-    return None, False
-
-
 def get_year_sgx():
     global last_error
     print("--- SGX 정보 추출 시작 ---")
@@ -90,13 +74,12 @@ def get_year_sgx():
         last_error = describe_error(e)
         return [{"month": "N/A", "price": "N/A"} for _ in range(MONTHS_AHEAD)]
 
-    # 월물별로 세션 행을 모은다 (응답이 delivery-month 오름차순).
-    by_delivery = {}
-    for item in data.get('data', []):
-        by_delivery.setdefault(item.get('delivery-month', ''), []).append(item)
-
     results = []
-    for delivery, rows in by_delivery.items():  # "2026-05"
+    for item in data.get('data', []):
+        if item.get('current-trading-session') != '0':
+            continue
+
+        delivery = item.get('delivery-month', '')  # "2026-05"
         # Sina API와 동일한 "YY/MM" 형식으로 변환
         try:
             yy, mm = delivery.split('-')
@@ -104,11 +87,11 @@ def get_year_sgx():
         except Exception:
             month = delivery
 
-        price_val, settle = _pick_price(rows)
+        price_val = item.get('last-traded-price-adj')
         price = 'N/A' if price_val is None else str(price_val)
 
-        print(f"  month={month}, price={price}{' (예비 정산가)' if settle else ''}")
-        results.append({"month": month, "price": price, "settle": settle})
+        print(f"  month={month}, price={price}")
+        results.append({"month": month, "price": price})
 
         if len(results) >= MONTHS_AHEAD:
             break
@@ -116,7 +99,7 @@ def get_year_sgx():
     if not results:
         last_error = "SGX 응답은 받았지만 시세 데이터가 비어 있습니다."
     elif all(r['price'] == 'N/A' for r in results):
-        last_error = ("SGX 응답은 받았지만 모든 월물에 체결가/정산가가 없습니다. "
+        last_error = ("SGX 응답은 받았지만 모든 월물에 체결가가 없습니다. "
                       "장 시작 전이거나 SGX 데이터 갱신 중일 수 있습니다. 잠시 후 다시 로드해 주세요.")
 
     # MONTHS_AHEAD 미만이면 N/A로 채움
